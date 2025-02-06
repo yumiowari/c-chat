@@ -35,6 +35,27 @@ int main(int argc, char **argv){
     printf("Verificando parâmetros de entrada...\n");
     if(!checkArgs(argc, argv))exit(EXIT_FAILURE);
 
+    printf("Criando soquete de cliente...\n");
+    client_socket = socket(AF_INET, SOCK_STREAM, 0); // soquete TCP/IPv4
+    if(client_socket == -1){
+        fprintf(stderr, RED "ERRO: Falha na criação do soquete do servidor.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Configurando endereço do servidor...\n");
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
+    port = atoi(argv[1]);
+    server_addr.sin_port = htons(port);
+
+    printf("Estabelecendo conexão com o servidor...\n");
+    if(connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1){
+        fprintf(stderr, RED "ERRO: Falha ao estabelecer conexão com o servidor.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }else printf(GREEN "\nConexão estabelecida com o servidor!\n" RESET);
+
     exit(EXIT_SUCCESS);
 }
 
