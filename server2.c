@@ -11,6 +11,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <arpa/inet.h>
 
 #define RESET  "\x1b[0m"
 #define RED    "\x1b[31m"
@@ -23,10 +24,45 @@ bool checkArgs(int argc, char **argv);
 int main(int argc, char **argv){
 // uso: ./server <porta>
 
-    printf("Verificando parâmetros de entrada...\n");
-    if(checkArgs(argc, argv)){
+    unsigned short int port; // porta (0 - 65535)
+    int server_socket; // soquete do servidor
+    struct sockaddr_in server_addr; // endereço do servidor
 
-    }else exit(EXIT_FAILURE);
+    printf("Verificando parâmetros de entrada...\n");
+    if(!checkArgs(argc, argv))exit(EXIT_FAILURE);
+
+    printf("Criando soquete do servidor...\n");
+    server_socket = socket(AF_INET, SOCK_STREAM, 0); // soquete TCP/IPv4
+    if(server_socket == -1){
+        fprintf(stderr, RED "ERRO: Falha na criação do soquete do servidor.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Configurando endereço do servidor...\n");
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY; // aceita requisições de qualquer IP
+    port = atoi(argv[1]);
+    server_addr.sin_port = htons(port);
+
+    printf("Vinculando o soquete do servidor à porta %d...\n", port);
+    if(bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1){
+        fprintf(stderr, RED "ERRO: Falha ao vincular o soquete do servidor à porta %d." RESET, port);
+
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Iniciando o servidor...\n");
+    if(listen(server_socket, 5) == -1){
+        fprintf(stderr, RED "Falha ao iniciar o servidor.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }else printf(GREEN "\nServidor on-line e ouvindo na porta %d!\n", port);
+
+    // loop do servidor
+    while(true){
+
+    }
 
     exit(EXIT_SUCCESS);
 }
