@@ -12,6 +12,8 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <pthread.h>
 
 #define RESET  "\x1b[0m"
 #define RED    "\x1b[31m"
@@ -27,7 +29,13 @@ struct client_info{
 };
 
 bool checkArgs(int argc, char **argv);
-// função p/ verificar parâmetros de entrada
+// função p/ verificar os parâmetros de entrada
+
+void *handleMsgIn(void *args);
+// função p/ lidar com o recebimento de mensagens do cliente
+
+void *handleMsgOut(void *args);
+// função p/ lidar com o envio de mensagens ao cliente
 
 int main(int argc, char **argv){
 // uso: ./server <porta>
@@ -64,17 +72,17 @@ int main(int argc, char **argv){
 
     printf("Vinculando o soquete do servidor à porta %d...\n", port);
     if(bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1){
-        fprintf(stderr, RED "ERRO: Falha ao vincular o soquete do servidor à porta %d." RESET, port);
+        fprintf(stderr, RED "ERRO: Falha ao vincular o soquete do servidor à porta %d.\n" RESET, port);
 
         exit(EXIT_FAILURE);
     }
 
     printf("Iniciando o servidor...\n");
     if(listen(server_socket, 5) == -1){
-        fprintf(stderr, RED "Falha ao iniciar o servidor.\n" RESET);
+        fprintf(stderr, RED "ERRO: Falha ao iniciar o servidor.\n" RESET);
 
         exit(EXIT_FAILURE);
-    }else printf(GREEN "\nServidor on-line e ouvindo na porta %d!\n", port);
+    }else printf(GREEN "\nServidor on-line e ouvindo na porta %d!\n" RESET, port);
 
     // loop do servidor
     while(true){
@@ -99,20 +107,67 @@ int main(int argc, char **argv){
         strcpy(client_id.username, username);
 
         printf(BLUE "%s" RESET " se juntou ao chat!\n", username);
+    
+        if(pid == -1){ // fork() falhou
+            fprintf(stderr, RED "ERRO: Criação do processo filho falhou\n" RESET
+                                "Conexão com o cliente encerrada.\n");
+
+            close(client_socket);
+
+            continue;
+        }else if(pid == 0){ // processo filho
+            close(server_socket); // não aceita novas conexões
+
+            /* lógica de comunicação com o cliente */
+            if(pthread_create(&tid_in, NULL, handleMsgIn, &client_id) != 0){
+                fprintf(stderr, RED "ERRO: Falha ao criar thread para escutar o cliente.\n" RESET);
+
+                exit(EXIT_FAILURE);
+            }
+
+            if(pthread_create(&tid_out, NULL, handleMsgOut, &client_id) != 0){
+                fprintf(stderr, RED "ERRO: Falha ao criar thread para falar ao cliente.\n" RESET);
+
+                exit(EXIT_FAILURE);
+            }
+                
+            if(pthread_join(tid_in, NULL) != 0){
+            // espera o fim da conexão com o cliente
+                fprintf(stderr, RED "ERRO: Falha ao aguardar a thread handleMsgIn().\n" RESET);
+
+                pthread_cancel(tid_out); // tenta encerrar a thread de envio se a thread de recebimento falhou
+
+                exit(EXIT_FAILURE);
+            }
+
+            printf(BLUE "%s" RESET " saiu do chat!\n", username);
+
+            printf("Encerrando processo filho...\n");
+
+            pthread_cancel(tid_out);
+
+            exit(EXIT_SUCCESS);
+        }else{ // processo pai
+            close(client_socket); // prepara para estabelecer uma nova conexão
+        }
     }
+
+    printf(YELLOW "Encerrando servidor...\n" RESET);
 
     exit(EXIT_SUCCESS);
 }
 
 bool checkArgs(int argc, char **argv){
+// função p/ verificar os parâmetros de entrada
+
     if(argc < 2){
         fprintf(stderr, RED "ERRO: Argumentos insuficientes.\n" RESET
                             "Uso: ./server <porta>\n");
 
         return false;
     }else if(argc > 2){
-        fprintf(stderr, YELLOW "AVISO: Argumentos excedentes.\n" RESET
-                               "Uso: ./server <porta>\n");
+        printf(YELLOW "Aviso: Argumentos excedentes.\n" RESET
+                      "Uso: ./server <porta>\n");
     }
         
     for(int i = 0; i < strlen(argv[1]); i++){
@@ -130,4 +185,64 @@ bool checkArgs(int argc, char **argv){
     }
 
     return true;
+}
+
+void *handleMsgIn(void *args){
+// função p/ lidar com o recebimento de mensagens do cliente
+
+    char buffer[BUFFER_SIZE]; // buffer para I/O
+    ssize_t recv_bytes; // qtd de bytes recebidos
+    struct client_info *client_id = (struct client_info*) args; // identidade do cliente
+    int client_socket = client_id->client_socket; // soquete do cliente
+    char username[16]; // nome de usuário
+
+    strcpy(username, client_id->username);
+
+    while(true){
+        recv_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0);
+        
+        if(recv_bytes <= 0){
+            if(recv_bytes == 0){
+                printf(YELLOW "Aviso: A conexão com " BLUE "%s" YELLOW " foi perdida.\n" RESET, username);
+            }else fprintf(stderr, RED "ERRO: Falha na recepção de dados.\n" RESET);
+
+            break;
+        }
+
+        buffer[recv_bytes] = '\0';
+
+        printf(BLUE "%s" RESET ": %s", username, buffer);
+
+        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
+    }
+
+    close(client_socket);
+
+    pthread_exit(NULL);
+}
+
+void *handleMsgOut(void *args){
+// função p/ lidar com o envio de mensagens ao cliente
+
+    char buffer[BUFFER_SIZE]; // buffer para I/O
+    struct client_info *client_id = (struct client_info*) args; // identidade do cliente
+    int client_socket = client_id->client_socket; // soquete do cliente
+
+    while(true){
+        strcpy(buffer, "Ok!");
+
+        if(send(client_socket, buffer, strlen(buffer) + 1, 0) == -1){
+            fprintf(stderr, RED "ERRO: Falha ao enviar mensagem ao cliente.\n" RESET);
+
+            break;
+        }
+
+        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
+
+        sleep(1); // cutuca o cliente a cada segundo
+    }
+
+    close(client_socket);
+
+    pthread_exit(NULL);
 }

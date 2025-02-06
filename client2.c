@@ -13,17 +13,26 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <pthread.h>
 
 #define RESET  "\x1b[0m"
 #define RED    "\x1b[31m"
 #define GREEN  "\x1b[32m"
 #define YELLOW "\x1b[33m"
+#define BLUE   "\x1b[34m"
 
 #define SERVER_IP "127.0.0.1"
 #define BUFFER_SIZE 1024
 
 bool checkArgs(int argc, char **argv);
-// função p/ verificar parâmetros de entrada
+// função p/ verificar os parâmetros de entrada
+
+void *handleMsgIn(void *args);
+// função p/ lidar com o recebimento de mensagens do servidor
+
+void *handleMsgOut(void *args);
+// função p/ lidar com o envio de mensagens ao servidor
 
 int main(int argc, char **argv){
 // uso: ./client <porta> <nome de usuário>
@@ -33,6 +42,7 @@ int main(int argc, char **argv){
     int client_socket; // soquete de cliente
     struct sockaddr_in server_addr; // endereço do servidor
     char buffer[BUFFER_SIZE]; // buffer para I/O
+    pthread_t tid_in, tid_out; // "thread" id
 
     printf("Verificando parâmetros de entrada...\n");
     if(checkArgs(argc, argv)){
@@ -68,18 +78,47 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }
 
+    /* lógica de comunicação com o servidor */
+    if(pthread_create(&tid_in, NULL, handleMsgIn, &client_socket) != 0){
+        fprintf(stderr, RED "ERRO: Falha ao criar thread para escutar o servidor.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }
+
+    if(pthread_create(&tid_out, NULL, handleMsgOut, &client_socket) != 0){
+        fprintf(stderr, RED "ERRO: Falha ao criar thread para falar ao servidor.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }
+
+    if(pthread_join(tid_in, NULL) != 0){
+    // espera o fim da conexão com o servidor
+        fprintf(stderr, RED "ERRO: Falha ao aguardar a thread handleMsgIn().\n" RESET);
+
+        pthread_cancel(tid_out); // tenta encerrar a thread de envio se a thread de recebimento falhou
+
+        exit(EXIT_FAILURE);
+    }
+    //
+
+    printf(YELLOW "Encerrando cliente...\n" RESET);
+
+    pthread_cancel(tid_out);
+
     exit(EXIT_SUCCESS);
 }
 
 bool checkArgs(int argc, char **argv){
+// função p/ verificar os parâmetros de entrada
+
     if(argc < 3){
         fprintf(stderr, RED "ERRO: Argumentos insuficientes.\n" RESET
                             "Uso: ./client <porta> <nome de usuário>\n");
 
         return false;
     }else if(argc > 3){
-        fprintf(stderr, YELLOW "AVISO: Argumentos excedentes.\n" RESET
-                               "Uso: ./client <porta> <nome de usuário>\n");
+        printf(YELLOW "Aviso: Argumentos excedentes.\n" RESET
+                      "Uso: ./client <porta> <nome de usuário>\n");
     }
         
     for(int i = 0; i < strlen(argv[1]); i++){
@@ -116,4 +155,62 @@ bool checkArgs(int argc, char **argv){
     }
 
     return true;
+}
+
+void *handleMsgIn(void *args){
+// função p/ lidar com o recebimento de mensagens do servidor
+
+    char buffer[BUFFER_SIZE]; // buffer para I/O
+    ssize_t recv_bytes; // qtd de bytes recebidos
+    int client_socket = *((int*) args); // soquete de cliente
+
+    while(true){
+        recv_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0);
+        
+        if(recv_bytes <= 0){
+            if(recv_bytes == 0){
+                printf(YELLOW "\nAviso: A conexão com servidor foi perdida.\n" RESET);
+            }else fprintf(stderr, RED "ERRO: Falha na recepção de dados.\n" RESET);
+
+            break;
+        }
+
+        buffer[recv_bytes] = '\0';
+
+        if(strncmp(buffer, "Ok!", 3) != 0){
+            printf(YELLOW "Aviso: O servidor terminou a conexão.\n" RESET);
+
+            break;
+        }
+
+        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
+    }
+
+    close(client_socket);
+
+    pthread_exit(NULL);
+}
+
+void *handleMsgOut(void *args){
+// função p/ lidar com o envio de mensagens ao servidor
+
+    char buffer[BUFFER_SIZE]; // buffer para I/O
+    int client_socket = *((int*) args); // soquete de cliente
+
+    while(true){
+        printf("> ");
+        fgets(buffer, BUFFER_SIZE, stdin);
+
+        if(send(client_socket, buffer, strlen(buffer) + 1, 0) == -1){
+            fprintf(stderr, RED "ERRO: Falha ao enviar mensagem ao servidor.\n" RESET);
+
+            break;
+        }
+
+        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
+    }
+
+    close(client_socket);
+
+    pthread_exit(NULL);
 }
