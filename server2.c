@@ -69,12 +69,12 @@ int main(int argc, char **argv){
 
 bool checkArgs(int argc, char **argv){
     if(argc < 2){
-        fprintf(stderr, RED "ERRO: Argumentos insuficientes.\n" RESET \
+        fprintf(stderr, RED "ERRO: Argumentos insuficientes.\n" RESET
                             "Uso: ./server <porta>\n");
 
         return false;
     }else if(argc > 2){
-        fprintf(stderr, YELLOW "AVISO: Argumentos excedentes.\n" RESET \
+        fprintf(stderr, YELLOW "AVISO: Argumentos excedentes.\n" RESET
                                "Uso: ./server <porta>\n");
     }
         
