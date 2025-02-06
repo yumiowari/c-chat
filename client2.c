@@ -6,3 +6,81 @@
 //                                              //
 //////////////////////////////////////////////////
 
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <stdbool.h>
+#include <arpa/inet.h>
+
+#define RESET  "\x1b[0m"
+#define RED    "\x1b[31m"
+#define GREEN  "\x1b[32m"
+#define YELLOW "\x1b[33m"
+
+#define SERVER_IP "127.0.0.1"
+
+bool checkArgs(int argc, char **argv);
+// função p/ verificar parâmetros de entrada
+
+int main(int argc, char **argv){
+// uso: ./client <porta> <nome de usuário>
+
+    unsigned short int port; // porta (0 - 65535)
+    char username[16]; // nome de usuário
+    int client_socket; // soquete de cliente
+    struct sockaddr_in server_addr; // endereço do servidor
+
+    printf("Verificando parâmetros de entrada...\n");
+    if(!checkArgs(argc, argv))exit(EXIT_FAILURE);
+
+    exit(EXIT_SUCCESS);
+}
+
+bool checkArgs(int argc, char **argv){
+    if(argc < 3){
+        fprintf(stderr, RED "ERRO: Argumentos insuficientes.\n" RESET \
+                            "Uso: ./client <porta> <nome de usuário>\n");
+
+        return false;
+    }else if(argc > 3){
+        fprintf(stderr, YELLOW "AVISO: Argumentos excedentes.\n" RESET \
+                               "Uso: ./client <porta> <nome de usuário>\n");
+    }
+        
+    for(int i = 0; i < strlen(argv[1]); i++){
+        if(!isdigit(argv[1][i])){
+            fprintf(stderr, RED "ERRO: A porta deve ser um inteiro.\n" RESET);
+
+            return false;
+        }
+    }
+
+    if(atoi(argv[1]) > 65535 || atoi(argv[1]) < 0){
+        fprintf(stderr, RED "ERRO: A porta deve ser um inteiro positivo entre 0 e 65535.\n" RESET);
+        
+        return false;
+    }
+
+    if(strlen(argv[2]) > 15){
+        fprintf(stderr, RED "ERRO: O nome de usuário não pode exceder 15 caracteres.\n" RESET);
+
+        return false;
+    }
+
+    for(int i = 0; i < strlen(argv[2]); i++){
+        if(
+           ((argv[2][i] < 'A') || (argv[2][i] > 'Z')) &&
+           ((argv[2][i] < 'a') || (argv[2][i] > 'z')) &&
+           (argv[2][i] != '_')
+          ){
+            fprintf(stderr, RED "ERRO: O nome de usuário contém símbolos proibidos.\n" RESET
+                                "São caracteres válidos: A-Z a-z _\n");
+
+            return false;
+        }
+    }
+
+    return true;
+}
