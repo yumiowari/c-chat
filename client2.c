@@ -77,6 +77,7 @@ int main(int argc, char **argv){
 
         exit(EXIT_FAILURE);
     }
+    memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
 
     /* lógica de comunicação com o servidor */
     if(pthread_create(&tid_in, NULL, handleMsgIn, &client_socket) != 0){
@@ -93,7 +94,7 @@ int main(int argc, char **argv){
 
     if(pthread_join(tid_in, NULL) != 0){
     // espera o fim da conexão com o servidor
-        fprintf(stderr, RED "ERRO: Falha ao aguardar a thread handleMsgIn().\n" RESET);
+        fprintf(stderr, RED "ERRO: Falha ao aguardar a thread de recebimento de mensagens.\n" RESET);
 
         pthread_cancel(tid_out); // tenta encerrar a thread de envio se a thread de recebimento falhou
 

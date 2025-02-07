@@ -108,6 +108,8 @@ int main(int argc, char **argv){
 
         printf(BLUE "%s" RESET " se juntou ao chat!\n", username);
     
+        pid = fork();
+
         if(pid == -1){ // fork() falhou
             fprintf(stderr, RED "ERRO: Criação do processo filho falhou\n" RESET
                                 "Conexão com o cliente encerrada.\n");
@@ -133,7 +135,7 @@ int main(int argc, char **argv){
                 
             if(pthread_join(tid_in, NULL) != 0){
             // espera o fim da conexão com o cliente
-                fprintf(stderr, RED "ERRO: Falha ao aguardar a thread handleMsgIn().\n" RESET);
+                fprintf(stderr, RED "ERRO: Falha ao aguardar a thread de recebimento de mensagens.\n" RESET);
 
                 pthread_cancel(tid_out); // tenta encerrar a thread de envio se a thread de recebimento falhou
 
