@@ -15,6 +15,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
+#include <limits.h>
 /***************/
 
 /* MACROS */
@@ -34,6 +36,14 @@
 #define BUFFER_SIZE 1024
 /*********/
 
+/* ESTRUTURAS */
+struct client_info{
+    char username[16];
+    int client_socket;
+    int secret;
+};
+/**************/
+
 /* ASSINATURAS */
 bool checkArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
@@ -43,6 +53,11 @@ void *handleMsgIn(void *args);
 
 void *handleMsgOut(void *args);
 // função p/ lidar com o envio de mensagens ao servidor
+
+unsigned int random_int(){
+    return rand();
+}
+// função p/ gerar um número inteiro aleatório (0 - RAND_MAX)
 /***************/
 
 int main(int argc, char **argv){
@@ -54,12 +69,19 @@ int main(int argc, char **argv){
     struct sockaddr_in server_addr; // endereço do servidor
     char buffer[BUFFER_SIZE]; // buffer para I/O
     pthread_t tid_in, tid_out; // "thread" id
+    struct client_info client_id;
+    int secret;
+
+    srand(time(NULL)); // inicializa a semente p/ rand()
+    secret = random_int();
+    client_id.secret = secret;
 
     printf("Verificando parâmetros de entrada...\n");
     if(checkArgs(argc, argv)){
         port = atoi(argv[1]);
         strcpy(username, argv[2]);
     }else exit(EXIT_FAILURE);
+    strcpy(client_id.username, username);
 
     printf("Criando soquete de cliente...\n");
     client_socket = socket(AF_INET, SOCK_STREAM, 0); // soquete TCP/IPv4
@@ -68,6 +90,7 @@ int main(int argc, char **argv){
 
         exit(EXIT_FAILURE);
     }
+    client_id.client_socket = client_socket;
 
     printf("Configurando endereço do servidor...\n");
     server_addr.sin_family = AF_INET;
@@ -81,23 +104,23 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }else printf(GREEN "\nConexão estabelecida com o servidor!\n" RESET);
 
-    // informa o nome de usuário ao servidor
-    strcpy(buffer, username);
+    // informa o nome de usuário e o segredo ao servidor
+    sprintf(buffer, "%s %d", username, secret);
     if(send(client_socket, buffer, BUFFER_SIZE, 0) == -1){
-        fprintf(stderr, RED "ERRO: Falha ao informar o nome de usuário ao servidor.\n" RESET);
+        fprintf(stderr, RED "ERRO: Falha ao informar o nome de usuário e o segredo ao servidor.\n" RESET);
 
         exit(EXIT_FAILURE);
     }
     memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
 
     /* lógica de comunicação com o servidor */
-    if(pthread_create(&tid_in, NULL, handleMsgIn, &client_socket) != 0){
+    if(pthread_create(&tid_in, NULL, handleMsgIn, &client_id) != 0){
         fprintf(stderr, RED "ERRO: Falha ao criar thread para escutar o servidor.\n" RESET);
 
         exit(EXIT_FAILURE);
     }
 
-    if(pthread_create(&tid_out, NULL, handleMsgOut, &client_socket) != 0){
+    if(pthread_create(&tid_out, NULL, handleMsgOut, &client_id) != 0){
         fprintf(stderr, RED "ERRO: Falha ao criar thread para falar ao servidor.\n" RESET);
 
         exit(EXIT_FAILURE);
@@ -176,7 +199,10 @@ void *handleMsgIn(void *args){
 
     char buffer[BUFFER_SIZE]; // buffer para I/O
     ssize_t recv_bytes; // qtd de bytes recebidos
-    int client_socket = *((int*) args); // soquete de cliente
+    struct client_info *client_id = (struct client_info*) args; // identidade do cliente
+    int client_socket = client_id->client_socket; // soquete do cliente
+    int secret = client_id->secret;
+    int recv_secret;
 
     while(true){
         recv_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0);
@@ -191,7 +217,9 @@ void *handleMsgIn(void *args){
 
         buffer[recv_bytes] = '\0';
 
-        if(strncmp(buffer, "Ok!", 3) != 0){
+        recv_secret = atoi(buffer);
+
+        if(recv_secret != secret){
             printf(YELLOW "\nAviso: O servidor terminou a conexão.\n" RESET);
 
             break;
@@ -209,7 +237,8 @@ void *handleMsgOut(void *args){
 // função p/ lidar com o envio de mensagens ao servidor
 
     char buffer[BUFFER_SIZE]; // buffer para I/O
-    int client_socket = *((int*) args); // soquete de cliente
+    struct client_info *client_id = (struct client_info*) args; // identidade do cliente
+    int client_socket = client_id->client_socket; // soquete do cliente
 
     while(true){
         printf(MAGENTA "> " RESET);
