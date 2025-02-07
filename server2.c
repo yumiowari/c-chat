@@ -6,6 +6,7 @@
 //                                              //
 //////////////////////////////////////////////////
 
+/* BIBLIOTECAS */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,20 +15,31 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
+/***************/
 
-#define RESET  "\x1b[0m"
-#define RED    "\x1b[31m"
-#define GREEN  "\x1b[32m"
-#define YELLOW "\x1b[33m"
-#define BLUE   "\x1b[34m"
+/* MACROS */
+#define RESET   "\x1B[0m"
+
+#define BLACK   "\x1B[30m"
+#define RED     "\x1B[31m"
+#define GREEN   "\x1B[32m"
+#define YELLOW  "\x1B[33m"
+#define BLUE    "\x1B[34m"
+#define MAGENTA "\x1B[35m"
+#define CYAN    "\x1B[36m"
+#define WHITE   "\x1B[37m"
 
 #define BUFFER_SIZE 1024
+/**********/
 
+/* ESTRUTURAS */
 struct client_info{
     char username[16];
     int client_socket;
 };
+/**************/
 
+/* ASSINATURAS */
 bool checkArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
 
@@ -36,6 +48,7 @@ void *handleMsgIn(void *args);
 
 void *handleMsgOut(void *args);
 // função p/ lidar com o envio de mensagens ao cliente
+/***************/
 
 int main(int argc, char **argv){
 // uso: ./server <porta>
@@ -146,6 +159,7 @@ int main(int argc, char **argv){
 
             printf("Encerrando processo filho...\n");
 
+            pthread_cancel(tid_in);
             pthread_cancel(tid_out);
 
             exit(EXIT_SUCCESS);
@@ -159,6 +173,7 @@ int main(int argc, char **argv){
     exit(EXIT_SUCCESS);
 }
 
+/* FUNÇÕES */
 bool checkArgs(int argc, char **argv){
 // função p/ verificar os parâmetros de entrada
 
@@ -213,7 +228,7 @@ void *handleMsgIn(void *args){
 
         buffer[recv_bytes] = '\0';
 
-        printf(BLUE "%s" RESET ": %s", username, buffer);
+        printf(MAGENTA "%s" RESET ": %s", username, buffer);
 
         memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
     }
@@ -248,3 +263,4 @@ void *handleMsgOut(void *args){
 
     pthread_exit(NULL);
 }
+/***********/

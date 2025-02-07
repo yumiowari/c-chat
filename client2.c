@@ -6,7 +6,7 @@
 //                                              //
 //////////////////////////////////////////////////
 
-
+/* BIBLIOTECAS */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,16 +15,26 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
+/***************/
 
-#define RESET  "\x1b[0m"
-#define RED    "\x1b[31m"
-#define GREEN  "\x1b[32m"
-#define YELLOW "\x1b[33m"
-#define BLUE   "\x1b[34m"
+/* MACROS */
+#define RESET   "\x1B[0m"
+
+#define BLACK   "\x1B[30m"
+#define RED     "\x1B[31m"
+#define GREEN   "\x1B[32m"
+#define YELLOW  "\x1B[33m"
+#define BLUE    "\x1B[34m"
+#define MAGENTA "\x1B[35m"
+#define CYAN    "\x1B[36m"
+#define WHITE   "\x1B[37m"
 
 #define SERVER_IP "127.0.0.1"
-#define BUFFER_SIZE 1024
 
+#define BUFFER_SIZE 1024
+/*********/
+
+/* ASSINATURAS */
 bool checkArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
 
@@ -33,6 +43,7 @@ void *handleMsgIn(void *args);
 
 void *handleMsgOut(void *args);
 // função p/ lidar com o envio de mensagens ao servidor
+/***************/
 
 int main(int argc, char **argv){
 // uso: ./client <porta> <nome de usuário>
@@ -104,11 +115,13 @@ int main(int argc, char **argv){
 
     printf(YELLOW "Encerrando cliente...\n" RESET);
 
+    pthread_cancel(tid_in);
     pthread_cancel(tid_out);
 
     exit(EXIT_SUCCESS);
 }
 
+/* FUNÇÕES */
 bool checkArgs(int argc, char **argv){
 // função p/ verificar os parâmetros de entrada
 
@@ -171,7 +184,7 @@ void *handleMsgIn(void *args){
         if(recv_bytes <= 0){
             if(recv_bytes == 0){
                 printf(YELLOW "\nAviso: A conexão com servidor foi perdida.\n" RESET);
-            }else fprintf(stderr, RED "ERRO: Falha na recepção de dados.\n" RESET);
+            }else fprintf(stderr, RED "\nERRO: Falha na recepção de dados.\n" RESET);
 
             break;
         }
@@ -179,7 +192,7 @@ void *handleMsgIn(void *args){
         buffer[recv_bytes] = '\0';
 
         if(strncmp(buffer, "Ok!", 3) != 0){
-            printf(YELLOW "Aviso: O servidor terminou a conexão.\n" RESET);
+            printf(YELLOW "\nAviso: O servidor terminou a conexão.\n" RESET);
 
             break;
         }
@@ -199,7 +212,7 @@ void *handleMsgOut(void *args){
     int client_socket = *((int*) args); // soquete de cliente
 
     while(true){
-        printf("> ");
+        printf(MAGENTA "> " RESET);
         fgets(buffer, BUFFER_SIZE, stdin);
 
         if(send(client_socket, buffer, strlen(buffer) + 1, 0) == -1){
@@ -215,3 +228,4 @@ void *handleMsgOut(void *args){
 
     pthread_exit(NULL);
 }
+/***********/
