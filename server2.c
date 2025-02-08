@@ -38,6 +38,11 @@ struct client_info{
     int client_socket;
     int secret;
 };
+
+struct message{
+    char buffer[BUFFER_SIZE];
+    int secret;
+};
 /**************/
 
 /* ASSINATURAS */
@@ -60,9 +65,7 @@ int main(int argc, char **argv){
     int client_socket; // soquete do cliente
     struct sockaddr_in client_addr; // endereço do cliente
     socklen_t client_addr_len = sizeof(client_addr); // tamanho do endereço do cliente
-    char buffer[BUFFER_SIZE]; // buffer para I/O
-    char *token;
-    int i; // contador
+    struct message msg; // estrutura "mensagem" para I/O
     char username[16]; // nome do usuário
     int secret;
     struct client_info client_id; // identidade do cliente
@@ -112,32 +115,24 @@ int main(int argc, char **argv){
         }
 
         // configura a identidade do cliente
-        if(recv(client_socket, buffer, BUFFER_SIZE, 0) <= 0){
+        if(recv(client_socket, &msg, sizeof(msg), 0) <= 0){
             fprintf(stderr, RED "ERRO: Falha ao receber a identidade do cliente.\n" RESET);
 
             exit(EXIT_FAILURE);
         }
 
-        i = 0;
-        token = strtok(buffer, " ");
-        while(token != NULL){
-            if(i == 0){ // 1ª iteração
-                strcpy(username, token);
-                username[strlen(token)] = '\0';
-            }
-
-            if(i == 1){ // 2ª iteração
-                secret = atoi(token);
-            }
-
-            i++;
-
-            token = strtok(NULL, " ");
-        }
-
         client_id.client_socket = client_socket;
+        strcpy(username, msg.buffer);
         strcpy(client_id.username, username);
+        memset(msg.buffer, 0, BUFFER_SIZE); // limpa o buffer
+        secret = msg.secret;
         client_id.secret = secret;
+        printf("É o cliente:\n"
+               "Apelido: %s\n"
+               "Soquete: %d\n"
+               "Segredo: %d\n", client_id.username,
+                                client_id.client_socket,
+                                client_id.secret);
 
         printf(BLUE "%s" RESET " se juntou ao chat!\n", username);
     
@@ -227,15 +222,16 @@ bool checkArgs(int argc, char **argv){
 void *handleMsgIn(void *args){
 // função p/ lidar com o recebimento de mensagens do cliente
 
-    char buffer[BUFFER_SIZE]; // buffer para I/O
+    struct message msg; // estrutura "mensagem" para I/O
     ssize_t recv_bytes; // qtd de bytes recebidos
     struct client_info *client_id = (struct client_info*) args; // identidade do cliente
     int client_socket = client_id->client_socket; // soquete do cliente
     char username[16]; // nome de usuário
     strcpy(username, client_id->username);
+    int secret = client_id->secret;
 
     while(true){
-        recv_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0);
+        recv_bytes = recv(client_socket, &msg, sizeof(msg), 0);
         
         if(recv_bytes <= 0){
             if(recv_bytes == 0){
@@ -245,11 +241,15 @@ void *handleMsgIn(void *args){
             break;
         }
 
-        buffer[recv_bytes] = '\0';
+        if(msg.secret == secret){
+            printf(MAGENTA "%s" RESET ": %s", username, msg.buffer);
+        }else{
+            fprintf(stderr, RED "ERRO: Código de segurança inválido para o cliente " BLUE "%s.\n" RESET, username);
 
-        printf(MAGENTA "%s" RESET ": %s", username, buffer);
+            break;
+        }
 
-        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
+        memset(msg.buffer, 0, BUFFER_SIZE); // limpa o buffer
     }
 
     close(client_socket);
@@ -260,15 +260,15 @@ void *handleMsgIn(void *args){
 void *handleMsgOut(void *args){
 // função p/ lidar com o envio de mensagens ao cliente
 
-    char buffer[BUFFER_SIZE]; // buffer para I/O
+    struct message msg; // estrutura "mensagem" para I/O
     struct client_info *client_id = (struct client_info*) args; // identidade do cliente
     int client_socket = client_id->client_socket; // soquete do cliente
     int secret = client_id->secret;
-
-    sprintf(buffer, "%d", secret);
+    msg.secret = secret;
+    memset(msg.buffer, 0, BUFFER_SIZE);
 
     while(true){
-        if(send(client_socket, buffer, strlen(buffer) + 1, 0) == -1){
+        if(send(client_socket, &msg, sizeof(msg), 0) == -1){
             fprintf(stderr, RED "ERRO: Falha ao enviar mensagem ao cliente.\n" RESET);
 
             break;

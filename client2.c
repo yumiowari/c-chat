@@ -42,6 +42,11 @@ struct client_info{
     int client_socket;
     int secret;
 };
+
+struct message{
+    char buffer[BUFFER_SIZE];
+    int secret;
+};
 /**************/
 
 /* ASSINATURAS */
@@ -55,22 +60,22 @@ void *handleMsgOut(void *args);
 // função p/ lidar com o envio de mensagens ao servidor
 
 unsigned int random_int(){
-    return rand();
+    return rand() % 1000000;
 }
-// função p/ gerar um número inteiro aleatório (0 - RAND_MAX)
+// função p/ gerar um número inteiro aleatório (0 - 999999)
 /***************/
 
 int main(int argc, char **argv){
 // uso: ./client <porta> <nome de usuário>
 
     unsigned short int port; // porta (0 - 65535)
+    int secret; // segredo
     char username[16]; // nome de usuário
     int client_socket; // soquete de cliente
+    struct message msg; // estrutura "mensagem" para I/O
     struct sockaddr_in server_addr; // endereço do servidor
-    char buffer[BUFFER_SIZE]; // buffer para I/O
     pthread_t tid_in, tid_out; // "thread" id
-    struct client_info client_id;
-    int secret;
+    struct client_info client_id; // identidade de cliente
 
     srand(time(NULL)); // inicializa a semente p/ rand()
     secret = random_int();
@@ -105,13 +110,14 @@ int main(int argc, char **argv){
     }else printf(GREEN "\nConexão estabelecida com o servidor!\n" RESET);
 
     // informa o nome de usuário e o segredo ao servidor
-    sprintf(buffer, "%s %d", username, secret);
-    if(send(client_socket, buffer, BUFFER_SIZE, 0) == -1){
+    strcpy(msg.buffer, username);
+    msg.secret = secret;
+    if(send(client_socket, &msg, sizeof(msg), 0) == -1){
         fprintf(stderr, RED "ERRO: Falha ao informar o nome de usuário e o segredo ao servidor.\n" RESET);
 
         exit(EXIT_FAILURE);
     }
-    memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
+    memset(msg.buffer, 0, BUFFER_SIZE); // limpa o buffer
 
     /* lógica de comunicação com o servidor */
     if(pthread_create(&tid_in, NULL, handleMsgIn, &client_id) != 0){
@@ -136,7 +142,7 @@ int main(int argc, char **argv){
     }
     //
 
-    printf(YELLOW "Encerrando cliente...\n" RESET);
+    printf(YELLOW "Encerrando aplicação...\n" RESET);
 
     pthread_cancel(tid_in);
     pthread_cancel(tid_out);
@@ -197,15 +203,15 @@ bool checkArgs(int argc, char **argv){
 void *handleMsgIn(void *args){
 // função p/ lidar com o recebimento de mensagens do servidor
 
-    char buffer[BUFFER_SIZE]; // buffer para I/O
+    struct message msg; // estrutura "mensagem" para I/O
     ssize_t recv_bytes; // qtd de bytes recebidos
     struct client_info *client_id = (struct client_info*) args; // identidade do cliente
     int client_socket = client_id->client_socket; // soquete do cliente
-    int secret = client_id->secret;
-    int recv_secret;
+    int secret = client_id->secret; // segredo
+    int recv_secret; // segredo "recebido"
 
     while(true){
-        recv_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0);
+        recv_bytes = recv(client_socket, &msg, sizeof(msg), 0);
         
         if(recv_bytes <= 0){
             if(recv_bytes == 0){
@@ -215,9 +221,7 @@ void *handleMsgIn(void *args){
             break;
         }
 
-        buffer[recv_bytes] = '\0';
-
-        recv_secret = atoi(buffer);
+        recv_secret = msg.secret;
 
         if(recv_secret != secret){
             printf(YELLOW "\nAviso: O servidor terminou a conexão.\n" RESET);
@@ -225,7 +229,7 @@ void *handleMsgIn(void *args){
             break;
         }
 
-        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
+        memset(msg.buffer, 0, BUFFER_SIZE); // limpa o buffer
     }
 
     close(client_socket);
@@ -239,18 +243,20 @@ void *handleMsgOut(void *args){
     char buffer[BUFFER_SIZE]; // buffer para I/O
     struct client_info *client_id = (struct client_info*) args; // identidade do cliente
     int client_socket = client_id->client_socket; // soquete do cliente
+    struct message msg; // estrutura "mensagem" para I/O
+    msg.secret = client_id->secret; // segredo
 
     while(true){
         printf(MAGENTA "> " RESET);
-        fgets(buffer, BUFFER_SIZE, stdin);
+        fgets(msg.buffer, BUFFER_SIZE, stdin);
 
-        if(send(client_socket, buffer, strlen(buffer) + 1, 0) == -1){
+        if(send(client_socket, &msg, sizeof(msg), 0) == -1){
             fprintf(stderr, RED "ERRO: Falha ao enviar mensagem ao servidor.\n" RESET);
 
             break;
         }
 
-        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
+        memset(msg.buffer, 0, BUFFER_SIZE); // limpa o buffer
     }
 
     close(client_socket);
