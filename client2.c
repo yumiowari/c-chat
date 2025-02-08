@@ -60,9 +60,13 @@ void *handleMsgOut(void *args);
 // função p/ lidar com o envio de mensagens ao servidor
 
 unsigned int random_int(){
-    return rand() % 1000000;
+// função p/ gerar um número inteiro aleatório
+
+    return rand();
 }
-// função p/ gerar um número inteiro aleatório (0 - 999999)
+
+struct client_info clientWrapper(int socket, struct message msg);
+// função p/ "embrulhar" as informações do cliente
 /***************/
 
 int main(int argc, char **argv){
@@ -79,14 +83,12 @@ int main(int argc, char **argv){
 
     srand(time(NULL)); // inicializa a semente p/ rand()
     secret = random_int();
-    client_id.secret = secret;
 
     printf("Verificando parâmetros de entrada...\n");
     if(checkArgs(argc, argv)){
         port = atoi(argv[1]);
         strcpy(username, argv[2]);
     }else exit(EXIT_FAILURE);
-    strcpy(client_id.username, username);
 
     printf("Criando soquete de cliente...\n");
     client_socket = socket(AF_INET, SOCK_STREAM, 0); // soquete TCP/IPv4
@@ -95,7 +97,6 @@ int main(int argc, char **argv){
 
         exit(EXIT_FAILURE);
     }
-    client_id.client_socket = client_socket;
 
     printf("Configurando endereço do servidor...\n");
     server_addr.sin_family = AF_INET;
@@ -117,6 +118,9 @@ int main(int argc, char **argv){
 
         exit(EXIT_FAILURE);
     }
+
+    client_id = clientWrapper(client_socket, msg);
+    
     memset(msg.buffer, 0, BUFFER_SIZE); // limpa o buffer
 
     /* lógica de comunicação com o servidor */
@@ -262,5 +266,17 @@ void *handleMsgOut(void *args){
     close(client_socket);
 
     pthread_exit(NULL);
+}
+
+struct client_info clientWrapper(int socket, struct message msg){
+// função p/ "embrulhar" as informações do cliente
+
+    struct client_info client_id;
+
+    client_id.client_socket = socket;
+    strcpy(client_id.username, msg.buffer);
+    client_id.secret = msg.secret;
+
+    return client_id;
 }
 /***********/

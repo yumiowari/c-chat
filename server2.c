@@ -54,6 +54,9 @@ void *handleMsgIn(void *args);
 
 void *handleMsgOut(void *args);
 // função p/ lidar com o envio de mensagens ao cliente
+
+struct client_info clientWrapper(int socket, struct message msg);
+// função p/ "embrulhar" as informações do cliente
 /***************/
 
 int main(int argc, char **argv){
@@ -67,7 +70,7 @@ int main(int argc, char **argv){
     socklen_t client_addr_len = sizeof(client_addr); // tamanho do endereço do cliente
     struct message msg; // estrutura "mensagem" para I/O
     char username[16]; // nome do usuário
-    int secret;
+    int secret; // segredo
     struct client_info client_id; // identidade do cliente
     pid_t pid; // "process id"
     pthread_t tid_in, tid_out; // "thread id"
@@ -121,18 +124,9 @@ int main(int argc, char **argv){
             exit(EXIT_FAILURE);
         }
 
-        client_id.client_socket = client_socket;
-        strcpy(username, msg.buffer);
-        strcpy(client_id.username, username);
-        memset(msg.buffer, 0, BUFFER_SIZE); // limpa o buffer
-        secret = msg.secret;
-        client_id.secret = secret;
-        printf("É o cliente:\n"
-               "Apelido: %s\n"
-               "Soquete: %d\n"
-               "Segredo: %d\n", client_id.username,
-                                client_id.client_socket,
-                                client_id.secret);
+        client_id = clientWrapper(client_socket, msg);
+        strcpy(username, client_id.username);
+        secret = client_id.secret;
 
         printf(BLUE "%s" RESET " se juntou ao chat!\n", username);
     
@@ -280,5 +274,17 @@ void *handleMsgOut(void *args){
     close(client_socket);
 
     pthread_exit(NULL);
+}
+
+struct client_info clientWrapper(int socket, struct message msg){
+// função p/ "embrulhar" as informações do cliente
+
+    struct client_info client_id;
+
+    client_id.client_socket = socket;
+    strcpy(client_id.username, msg.buffer);
+    client_id.secret = msg.secret;
+
+    return client_id;
 }
 /***********/
