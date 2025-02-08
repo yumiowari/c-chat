@@ -31,7 +31,7 @@
 #define CYAN    "\x1B[36m"
 #define WHITE   "\x1B[37m"
 
-#define SERVER_IP "127.0.0.1"
+#define SERVER_IP "127.0.0.1" // "127.0.0.1" para host local
 
 #define BUFFER_SIZE 1024
 /*********/
@@ -120,7 +120,7 @@ int main(int argc, char **argv){
     }
 
     client_id = clientWrapper(client_socket, msg);
-    
+
     memset(msg.buffer, 0, BUFFER_SIZE); // limpa o buffer
 
     /* lógica de comunicação com o servidor */
