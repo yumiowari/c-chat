@@ -36,6 +36,16 @@
 /**********/
 
 /* ESTRUTURAS */
+struct node{
+    int value;
+    struct node *next;
+}
+
+struct list{
+    int qty;
+    struct node *root;
+}
+
 struct client_info{
     char username[16];
     int client_socket;
@@ -51,11 +61,115 @@ struct message{
 /* VARIÁVEIS GLOBAIS */
 int server_socket; // soquete do servidor
 pthread_t tid_in, tid_out; // "thread" id
-int leaf_node_arr[LEAF_NODE_MAX]; // vetor de pids de processos filhos
-int leaf_node_qty = 0; // quantidade de processos filhos
+Lista *leaf_pids; // lista de pids dos processos filhos (nós folha)
 /*********************/
 
 /* ASSINATURAS */
+struct list* makeList(){
+// função p/ alocar o ponteiro p/ a lista
+    
+    struct list* list = (struct list*) malloc(sizeof(struct list));
+    if(list == NULL)return NULL;
+
+    list->root = NULL;
+    list->qty = NULL;
+
+    return list;
+}
+
+struct node* makeNode(int value){
+// função p/ alocar o ponteiro para o nó
+    
+    struct node* new_node = (struct node*) malloc(sizeof(struct node));
+    if(new_node == NULL)return NULL;
+
+    new_node->value = value;
+    new_node->prox = NULL;
+
+    return new_node;
+}
+
+bool insertNode(struct list* list, int value){
+// função p/ inserir um novo nó na lista
+
+    if(list == NULL)return false;
+
+    struct node* new_node = makeNode(value);
+    if(new_node == NULL)return false;
+
+    if(list->qty > 0){
+        new_node->next = list->root;
+
+        list->root = new_node;
+    }else{ // se é o 1º nó
+        list->root = new_node;
+    }
+
+    list->qty++;
+
+    return true;
+}
+
+bool removeNode(struct list* list, int value){
+// função p/ remover um nó da lista
+
+    if(list == NULL)return false;
+
+    struct node *ant, *aux;
+
+    if(list->qty > 0){
+        aux = list->root;
+
+        if(aux->value != value){
+            while((aux != NULL) && (aux->value != value)){
+                ant = aux;
+
+                aux = aux->next;
+            }
+
+            if(aux != NULL){
+                if(aux->prox != NULL){
+                    aux->prox = aux->prox;
+                }else{ // é o último elemento
+                    ant->prox = NULL;
+                }
+
+                free(aux);
+            }else return false; // o nó não está na lista
+        }else{ // se é o 1º nó
+            list->root = aux->next;
+
+            free(aux);
+        }
+    }else return false; // lista vazia
+
+    list->qty--;
+
+    return true;
+}
+
+bool freeList(struct list* list){
+// função p/ liberar a lista da memória RAM
+
+    if(list == NULL)return false;
+
+    struct node *ant, *next;
+
+    ant = list->root;
+
+    while(ant != NULL){
+        next = ant->next;
+
+        free(ant);
+
+        ant = next;
+    }
+
+    free(list);
+
+    return true;
+}
+
 void handleSIGINT(int signal);
 // função p/ tratar o sinal de interrupção
 
@@ -92,6 +206,9 @@ int main(int argc, char **argv){
     int secret; // segredo
     struct client_info client_id; // identidade do cliente
     pid_t pid; // "process id"
+
+    // inicializa lista de pids dos processos filhos
+    leaf_pids = fazLista();
 
     // configura o tratamento do SIGINT
     sa.sa_handler = handleSIGINT; // define a função de tratamento do sinal
