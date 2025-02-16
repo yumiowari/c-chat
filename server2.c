@@ -15,6 +15,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
+#include <sys/wait.h>
 /***************/
 
 /* MACROS */
@@ -30,6 +32,7 @@
 #define WHITE   "\x1B[37m"
 
 #define BUFFER_SIZE 1024
+#define LEAF_NODE_MAX 128
 /**********/
 
 /* ESTRUTURAS */
@@ -45,7 +48,23 @@ struct message{
 };
 /**************/
 
+/* VARIÁVEIS GLOBAIS */
+int server_socket; // soquete do servidor
+pthread_t tid_in, tid_out; // "thread" id
+int leaf_node_arr[LEAF_NODE_MAX]; // vetor de pids de processos filhos
+int leaf_node_qty = 0; // quantidade de processos filhos
+/*********************/
+
 /* ASSINATURAS */
+void handleSIGINT(int signal);
+// função p/ tratar o sinal de interrupção
+
+void handleSIGCHLD(int signal);
+// função p/ tratar o SIGCHLD
+
+void handleSIGTERM(int signal);
+// função p/ tratar o sinal de término
+
 bool checkArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
 
@@ -62,8 +81,8 @@ struct client_info clientWrapper(int socket, struct message msg);
 int main(int argc, char **argv){
 // uso: ./server <porta>
 
+    struct sigaction sa; // signal action
     unsigned short int port; // porta (0 - 65535)
-    int server_socket; // soquete do servidor
     struct sockaddr_in server_addr; // endereço do servidor
     int client_socket; // soquete do cliente
     struct sockaddr_in client_addr; // endereço do cliente
@@ -73,7 +92,26 @@ int main(int argc, char **argv){
     int secret; // segredo
     struct client_info client_id; // identidade do cliente
     pid_t pid; // "process id"
-    pthread_t tid_in, tid_out; // "thread id"
+
+    // configura o tratamento do SIGINT
+    sa.sa_handler = handleSIGINT; // define a função de tratamento do sinal
+    sigemptyset(&sa.sa_mask);     // não bloqueia outros sinais
+    sa.sa_flags = 0;              // sem flags adicionais
+    if(sigaction(SIGINT, &sa, NULL) == -1){
+        fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do sinal de interrupção.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }
+
+    // configura o tratamento do SIGCHLD
+    sa.sa_handler = handleSIGCHLD; // define a função de tratamento do sinal
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP; // Evita interrupção de chamadas bloqueantes
+    if(sigaction(SIGCHLD, &sa, NULL) == -1){
+        fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do SIGCHLD.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }
 
     printf("Verificando parâmetros de entrada...\n");
     if(checkArgs(argc, argv)){
@@ -142,6 +180,26 @@ int main(int argc, char **argv){
         }else if(pid == 0){ // processo filho
             close(server_socket); // não aceita novas conexões
 
+            // desconfigura o tratamento do SIGINT
+            sa.sa_handler = SIG_IGN;
+            sigemptyset(&sa.sa_mask);     // não bloqueia outros sinais
+            sa.sa_flags = 0;              // sem flags adicionais
+            if(sigaction(SIGINT, &sa, NULL) == -1){
+                fprintf(stderr, RED "ERRO: Falha ao desconfigurar o tratamento do sinal de interrupção.\n" RESET);
+        
+                exit(EXIT_FAILURE);
+            }
+
+            // configura o tratamento do SIGTERM
+            sa.sa_handler = handleSIGTERM;
+            sigemptyset(&sa.sa_mask);     // não bloqueia outros sinais
+            sa.sa_flags = 0;              // sem flags adicionais
+            if(sigaction(SIGTERM, &sa, NULL) == -1){
+                fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do sinal de término.\n" RESET);
+        
+                exit(EXIT_FAILURE);
+            }
+
             /* lógica de comunicação com o cliente */
             if(pthread_create(&tid_in, NULL, handleMsgIn, &client_id) != 0){
                 fprintf(stderr, RED "ERRO: Falha ao criar thread para escutar o cliente.\n" RESET);
@@ -174,6 +232,8 @@ int main(int argc, char **argv){
             exit(EXIT_SUCCESS);
         }else{ // processo pai
             close(client_socket); // prepara para estabelecer uma nova conexão
+
+            leaf_node_arr[leaf_node_qty++] = pid; // armazena o pid do processo filho
         }
     }
 
@@ -183,6 +243,54 @@ int main(int argc, char **argv){
 }
 
 /* FUNÇÕES */
+void handleSIGINT(int signal){
+// função p/ tratar o sinal de interrupção
+
+    printf(YELLOW "\nSinal de interrupção recebido.\n"
+                  "Encerrando aplicação...\n" RESET);
+
+    close(server_socket);
+
+    // encerra os processos filhos (nós folha)
+    for(int i = 0; i < leaf_node_qty; i++){
+        printf("Encerrando processo filho (PID: %d)...\n", leaf_node_arr[i]);
+
+        kill(leaf_node_arr[i], SIGTERM);
+    }
+
+    printf(GREEN "Servidor encerrado com sucesso.\n" RESET);
+
+    exit(EXIT_SUCCESS);
+}
+
+void handleSIGCHLD(int signal){
+// função p/ tratar o SIGCHLD
+
+    int status;
+    pid_t pid;
+
+    // `waitpid` com `WNOHANG` evita bloquear caso não haja filhos para limpar
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        printf("Filho com PID %d terminou.\n", pid);
+        printf("Removendo PID %d\n", pid); // to-do
+    }
+}
+
+void handleSIGTERM(int signal){
+// função p/ tratar o sinal de término
+
+    printf(YELLOW "\nSinal de término recebido.\n"
+                  "Encerrando aplicação...\n" RESET);
+    
+    // cancela as threads de comunicação
+    pthread_cancel(tid_in);
+    pthread_cancel(tid_out);
+    
+    printf(GREEN "Processo filho encerrado com sucesso.\n" RESET);
+    
+    exit(EXIT_SUCCESS);
+}
+
 bool checkArgs(int argc, char **argv){
 // função p/ verificar os parâmetros de entrada
 
