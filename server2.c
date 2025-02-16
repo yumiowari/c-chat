@@ -39,12 +39,12 @@
 struct node{
     int value;
     struct node *next;
-}
+};
 
 struct list{
     int qty;
     struct node *root;
-}
+};
 
 struct client_info{
     char username[16];
@@ -61,7 +61,7 @@ struct message{
 /* VARIÁVEIS GLOBAIS */
 int server_socket; // soquete do servidor
 pthread_t tid_in, tid_out; // "thread" id
-Lista *leaf_pids; // lista de pids dos processos filhos (nós folha)
+struct list *leaf_pids; // lista de pids dos processos filhos (nós folha)
 /*********************/
 
 /* ASSINATURAS */
@@ -72,7 +72,7 @@ struct list* makeList(){
     if(list == NULL)return NULL;
 
     list->root = NULL;
-    list->qty = NULL;
+    list->qty = 0;
 
     return list;
 }
@@ -84,7 +84,7 @@ struct node* makeNode(int value){
     if(new_node == NULL)return NULL;
 
     new_node->value = value;
-    new_node->prox = NULL;
+    new_node->next = NULL;
 
     return new_node;
 }
@@ -128,10 +128,10 @@ bool removeNode(struct list* list, int value){
             }
 
             if(aux != NULL){
-                if(aux->prox != NULL){
-                    aux->prox = aux->prox;
+                if(aux->next != NULL){
+                    aux->next = aux->next;
                 }else{ // é o último elemento
-                    ant->prox = NULL;
+                    ant->next = NULL;
                 }
 
                 free(aux);
@@ -208,7 +208,7 @@ int main(int argc, char **argv){
     pid_t pid; // "process id"
 
     // inicializa lista de pids dos processos filhos
-    leaf_pids = fazLista();
+    leaf_pids = makeList();
 
     // configura o tratamento do SIGINT
     sa.sa_handler = handleSIGINT; // define a função de tratamento do sinal
@@ -350,7 +350,12 @@ int main(int argc, char **argv){
         }else{ // processo pai
             close(client_socket); // prepara para estabelecer uma nova conexão
 
-            leaf_node_arr[leaf_node_qty++] = pid; // armazena o pid do processo filho
+            // armazena o pid do processo filho na lista
+            if(!insertNode(leaf_pids, pid)){
+                fprintf(stderr, RED "ERRO: Falha ao inserir o PID na lista.\n");
+
+                exit(EXIT_FAILURE);
+            }
         }
     }
 
@@ -363,17 +368,26 @@ int main(int argc, char **argv){
 void handleSIGINT(int signal){
 // função p/ tratar o sinal de interrupção
 
+    struct node *node;
+
     printf(YELLOW "\nSinal de interrupção recebido.\n"
                   "Encerrando aplicação...\n" RESET);
 
     close(server_socket);
 
     // encerra os processos filhos (nós folha)
-    for(int i = 0; i < leaf_node_qty; i++){
-        printf("Encerrando processo filho (PID: %d)...\n", leaf_node_arr[i]);
+    if(leaf_pids->qty > 0){
+        node = leaf_pids->root;
+        while(node != NULL){
+            printf("Encerrando processo filho (PID: %d)...\n", node->value);
 
-        kill(leaf_node_arr[i], SIGTERM);
+            kill(node->value, SIGTERM);
+
+            node = node->next;
+        }
     }
+
+    freeList(leaf_pids);
 
     printf(GREEN "Servidor encerrado com sucesso.\n" RESET);
 
@@ -389,7 +403,13 @@ void handleSIGCHLD(int signal){
     // `waitpid` com `WNOHANG` evita bloquear caso não haja filhos para limpar
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
         printf("Filho com PID %d terminou.\n", pid);
-        printf("Removendo PID %d\n", pid); // to-do
+
+        // remove o PID do processo filho na lista
+        if(!removeNode(leaf_pids, pid)){
+            fprintf(stderr, RED "ERRO: Falha ao remover o PID da lista.\n");
+
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
