@@ -6,52 +6,82 @@
 //                                              //
 //////////////////////////////////////////////////
 
+
+
 /* BIBLIOTECAS */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <stdbool.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <time.h>
-#include <limits.h>
+
+#include <stdio.h>     // funcionalidades de I/O
+#include <stdlib.h>    // manipulação de memória
+#include <string.h>    // manipulação de strings
+#include <ctype.h>     // manipulação de caracteres
+#include <stdbool.h>   // definição de tipo booleano
+#include <time.h>      // manipulação de data e hora
+#include <limits.h>    // definição de limites e constantes
+
+#include <arpa/inet.h> // manipulação de endereços de rede
+
+#include <unistd.h>    // manipulação de processos
+#include <pthread.h>   // manipulação de threads
+#include <signal.h>    // manipulação de sinais
+
 /***************/
 
+
+
 /* MACROS */
-#define RESET   "\x1B[0m"
 
-#define BLACK   "\x1B[30m"
-#define RED     "\x1B[31m"
-#define GREEN   "\x1B[32m"
-#define YELLOW  "\x1B[33m"
-#define BLUE    "\x1B[34m"
-#define MAGENTA "\x1B[35m"
-#define CYAN    "\x1B[36m"
-#define WHITE   "\x1B[37m"
+#define RESET   "\x1B[0m"  // cor padrão
 
-#define SERVER_IP "127.0.0.1" // "127.0.0.1" para host local
+#define BLACK   "\x1B[30m" // cor preta
+#define RED     "\x1B[31m" // cor vermelha
+#define GREEN   "\x1B[32m" // cor verde
+#define YELLOW  "\x1B[33m" // cor amarela
+#define BLUE    "\x1B[34m" // cor azul
+#define MAGENTA "\x1B[35m" // cor magenta
+#define CYAN    "\x1B[36m" // cor ciano
+#define WHITE   "\x1B[37m" // cor branca
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 1024   // tamanho do buffer de I/O
+
+#define SERVER_IP "127.0.0.1" // endereço IPv4 do servidor
+
 /*********/
 
+
+
 /* ESTRUTURAS */
+
 struct client_info{
     char username[16];
     int client_socket;
     int secret;
-};
+}typedef(Client); // identidade de cliente
 
 struct message{
     char buffer[BUFFER_SIZE];
     int secret;
-};
+}typedef(Message); // mensagem
+
 /**************/
 
+
+
+/* VARIÁVEIS GLOBAIS */
+
+int client_socket;         // soquete de cliente
+pthread_t tid_in, tid_out; // "thread" id
+
+/*********************/
+
+
+
 /* ASSINATURAS */
+
 bool checkArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
+
+void handleSIGINT(int signal);
+// função p/ tratar o sinal de interrupção (CTRL + C)
 
 void *handleMsgIn(void *args);
 // função p/ lidar com o recebimento de mensagens do servidor
@@ -65,21 +95,23 @@ unsigned int random_int(){
     return rand();
 }
 
-struct client_info clientWrapper(int socket, struct message msg);
+Client clientWrapper(int socket, Message msg);
 // função p/ "embrulhar" as informações do cliente
+
 /***************/
+
+
 
 int main(int argc, char **argv){
 // uso: ./client <porta> <nome de usuário>
 
+    struct sigaction sa; // signal action
     unsigned short int port; // porta (0 - 65535)
     int secret; // segredo
     char username[16]; // nome de usuário
-    int client_socket; // soquete de cliente
-    struct message msg; // estrutura "mensagem" para I/O
+    Message msg; // estrutura "mensagem" para I/O
     struct sockaddr_in server_addr; // endereço do servidor
-    pthread_t tid_in, tid_out; // "thread" id
-    struct client_info client_id; // identidade de cliente
+    Client client_id; // identidade de cliente
 
     srand(time(NULL)); // inicializa a semente p/ rand()
     secret = random_int();
@@ -90,6 +122,16 @@ int main(int argc, char **argv){
         strcpy(username, argv[2]);
     }else exit(EXIT_FAILURE);
 
+    // configura o tratamento do SIGINT
+    sa.sa_handler = handleSIGINT; // define a função de tratamento do sinal
+    sigemptyset(&sa.sa_mask);     // não bloqueia outros sinais
+    sa.sa_flags = 0;              // sem flags adicionais
+    if(sigaction(SIGINT, &sa, NULL) == -1){
+        fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do sinal de interrupção.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }
+    
     printf("Criando soquete de cliente...\n");
     client_socket = socket(AF_INET, SOCK_STREAM, 0); // soquete TCP/IPv4
     if(client_socket == -1){
@@ -154,7 +196,10 @@ int main(int argc, char **argv){
     exit(EXIT_SUCCESS);
 }
 
+
+
 /* FUNÇÕES */
+
 bool checkArgs(int argc, char **argv){
 // função p/ verificar os parâmetros de entrada
 
@@ -204,12 +249,29 @@ bool checkArgs(int argc, char **argv){
     return true;
 }
 
+void handleSIGINT(int signal){
+// função p/ tratar o sinal de interrupção (CTRL + C)
+    
+    printf(YELLOW "\nSinal de interrupção recebido.\n"
+                      "Encerrando aplicação...\n" RESET);
+    
+    // cancela as threads de comunicação
+    pthread_cancel(tid_in);
+    pthread_cancel(tid_out);
+
+    close(client_socket);
+    
+    printf(GREEN "Aplicação encerrada com sucesso.\n" RESET);
+    
+    exit(EXIT_SUCCESS);
+}
+
 void *handleMsgIn(void *args){
 // função p/ lidar com o recebimento de mensagens do servidor
 
-    struct message msg; // estrutura "mensagem" para I/O
+    Message msg; // estrutura "mensagem" para I/O
     ssize_t recv_bytes; // qtd de bytes recebidos
-    struct client_info *client_id = (struct client_info*) args; // identidade do cliente
+    Client *client_id = (Client*) args; // identidade do cliente
     int client_socket = client_id->client_socket; // soquete do cliente
     int secret = client_id->secret; // segredo
     int recv_secret; // segredo "recebido"
@@ -245,9 +307,9 @@ void *handleMsgOut(void *args){
 // função p/ lidar com o envio de mensagens ao servidor
 
     char buffer[BUFFER_SIZE]; // buffer para I/O
-    struct client_info *client_id = (struct client_info*) args; // identidade do cliente
+    Client *client_id = (Client*) args; // identidade do cliente
     int client_socket = client_id->client_socket; // soquete do cliente
-    struct message msg; // estrutura "mensagem" para I/O
+    Message msg; // estrutura "mensagem" para I/O
     msg.secret = client_id->secret; // segredo
 
     while(true){
@@ -268,10 +330,10 @@ void *handleMsgOut(void *args){
     pthread_exit(NULL);
 }
 
-struct client_info clientWrapper(int socket, struct message msg){
+Client clientWrapper(int socket, Message msg){
 // função p/ "embrulhar" as informações do cliente
 
-    struct client_info client_id;
+    Client client_id;
 
     client_id.client_socket = socket;
     strcpy(client_id.username, msg.buffer);
@@ -279,4 +341,5 @@ struct client_info clientWrapper(int socket, struct message msg){
 
     return client_id;
 }
+
 /***********/

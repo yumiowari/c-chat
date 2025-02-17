@@ -4,7 +4,13 @@ Sistema de chatting cliente-servidor em C.
 
 ## Compilação:
 
-`gcc client2.c -o client2 && gcc server2.c -o server2`
+- Cliente:
+
+`gcc client2.c -o client2`
+
+- Servidor:
+
+`gcc lista.c -o lista.o && gcc server2.c lista.o -o server2`
 
 ## Uso:
 

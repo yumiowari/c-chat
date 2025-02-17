@@ -6,48 +6,203 @@
 //                                              //
 //////////////////////////////////////////////////
 
+
+
 /* BIBLIOTECAS */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <stdbool.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <pthread.h>
+
+#include <stdio.h>     // funcionalidades de I/O
+#include <stdlib.h>    // manipulação de memória
+#include <string.h>    // manipulação de strings
+#include <ctype.h>     // manipulação de caracteres
+#include <stdbool.h>   // definição de tipo booleano
+
+#include <arpa/inet.h> // manipulação de endereços de rede
+
+#include <unistd.h>    // manipulação de processos
+#include <pthread.h>   // manipulação de threads
+#include <signal.h>    // manipulação de sinais
+#include <sys/wait.h>  // controle de processos filhos
+
 /***************/
 
+
+
 /* MACROS */
-#define RESET   "\x1B[0m"
 
-#define BLACK   "\x1B[30m"
-#define RED     "\x1B[31m"
-#define GREEN   "\x1B[32m"
-#define YELLOW  "\x1B[33m"
-#define BLUE    "\x1B[34m"
-#define MAGENTA "\x1B[35m"
-#define CYAN    "\x1B[36m"
-#define WHITE   "\x1B[37m"
+#define RESET   "\x1B[0m"  // cor padrão
 
-#define BUFFER_SIZE 1024
+#define BLACK   "\x1B[30m" // cor preta
+#define RED     "\x1B[31m" // cor vermelha
+#define GREEN   "\x1B[32m" // cor verde
+#define YELLOW  "\x1B[33m" // cor amarela
+#define BLUE    "\x1B[34m" // cor azul
+#define MAGENTA "\x1B[35m" // cor magenta
+#define CYAN    "\x1B[36m" // cor ciano
+#define WHITE   "\x1B[37m" // cor branca
+
+#define BUFFER_SIZE 1024   // tamanho do buffer de I/O
+
+#define SERVER_LIMIT 16    // limite máximo de usuários
+
 /**********/
 
+
+
 /* ESTRUTURAS */
+
+struct node{
+    int value;
+    struct node *next;
+}typedef(Node); // nó
+
+struct list{
+    int qty;
+    Node *root;
+}typedef(List); // lista
+
 struct client_info{
     char username[16];
     int client_socket;
     int secret;
-};
+}typedef(Client); // identidade do cliente
 
 struct message{
     char buffer[BUFFER_SIZE];
     int secret;
-};
+}typedef(Message); // mensagem
+
 /**************/
 
+
+
+/* VARIÁVEIS GLOBAIS */
+
+int server_socket;         // soquete do servidor
+pthread_t tid_in, tid_out; // "thread" id
+List *leaves;              // lista de PIDs dos processos filhos (i. e., nós folha)
+
+/*********************/
+
+
+
 /* ASSINATURAS */
+
+List* makeList(){
+// função p/ alocar o ponteiro para a lista
+    
+    List* list = (List*) malloc(sizeof(List));
+    if(list == NULL)return NULL;
+
+    list->root = NULL;
+    list->qty = 0;
+
+    return list;
+}
+
+Node* makeNode(int value){
+// função p/ alocar o ponteiro para o nó
+    
+    Node* new_node = (Node*) malloc(sizeof(Node));
+    if(new_node == NULL)return NULL;
+
+    new_node->value = value;
+    new_node->next = NULL;
+
+    return new_node;
+}
+
+bool insertNode(List* list, int value){
+// função p/ inserir um novo nó na lista
+
+    if(list == NULL)return false;
+
+    Node* new_node = makeNode(value);
+    if(new_node == NULL)return false;
+
+    if(list->qty > 0){
+        new_node->next = list->root;
+
+        list->root = new_node;
+    }else{ // se é o 1º nó
+        list->root = new_node;
+    }
+
+    list->qty++;
+
+    return true;
+}
+
+bool removeNode(List* list, int value){
+// função p/ remover um nó da lista
+
+    if(list == NULL)return false;
+
+    Node *ant, *aux;
+
+    if(list->qty > 0){
+        aux = list->root;
+
+        if(aux->value != value){
+            while((aux != NULL) && (aux->value != value)){
+                ant = aux;
+
+                aux = aux->next;
+            }
+
+            if(aux != NULL){
+                if(aux->next != NULL){
+                    aux->next = aux->next;
+                }else{ // é o último elemento
+                    ant->next = NULL;
+                }
+
+                free(aux);
+            }else return false; // o nó não está na lista
+        }else{ // se é o 1º nó
+            list->root = aux->next;
+
+            free(aux);
+        }
+    }else return false; // lista vazia
+
+    list->qty--;
+
+    return true;
+}
+
+bool freeList(List* list){
+// função p/ liberar a lista da memória RAM
+
+    if(list == NULL)return false;
+
+    Node *ant, *next;
+
+    ant = list->root;
+
+    while(ant != NULL){
+        next = ant->next;
+
+        free(ant);
+
+        ant = next;
+    }
+
+    free(list);
+
+    return true;
+}
+
 bool checkArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
+
+void handleSIGINT(int signal);
+// função p/ tratar o sinal de interrupção (CTRL + C)
+
+void handleSIGCHLD(int signal);
+// função p/ tratar o SIGCHLD (quando um processo filho encerra)
+
+void handleSIGTERM(int signal);
+// função p/ tratar o sinal de encerramento de processo
 
 void *handleMsgIn(void *args);
 // função p/ lidar com o recebimento de mensagens do cliente
@@ -55,30 +210,54 @@ void *handleMsgIn(void *args);
 void *handleMsgOut(void *args);
 // função p/ lidar com o envio de mensagens ao cliente
 
-struct client_info clientWrapper(int socket, struct message msg);
+Client clientWrapper(int socket, Message msg);
 // função p/ "embrulhar" as informações do cliente
+
 /***************/
+
+
 
 int main(int argc, char **argv){
 // uso: ./server <porta>
 
+    struct sigaction sa; // signal action
     unsigned short int port; // porta (0 - 65535)
-    int server_socket; // soquete do servidor
     struct sockaddr_in server_addr; // endereço do servidor
     int client_socket; // soquete do cliente
     struct sockaddr_in client_addr; // endereço do cliente
     socklen_t client_addr_len = sizeof(client_addr); // tamanho do endereço do cliente
-    struct message msg; // estrutura "mensagem" para I/O
+    Message msg; // estrutura "mensagem" para I/O
     char username[16]; // nome do usuário
     int secret; // segredo
-    struct client_info client_id; // identidade do cliente
+    Client client_id; // identidade do cliente
     pid_t pid; // "process id"
-    pthread_t tid_in, tid_out; // "thread id"
 
     printf("Verificando parâmetros de entrada...\n");
     if(checkArgs(argc, argv)){
         port = atoi(argv[1]);
     }else exit(EXIT_FAILURE);
+
+    leaves = makeList(); // inicializa lista de pids dos processos filhos
+
+    // configura o tratamento do SIGINT
+    sa.sa_handler = handleSIGINT; // define a função de tratamento do sinal
+    sigemptyset(&sa.sa_mask);     // não bloqueia outros sinais
+    sa.sa_flags = 0;              // sem flags adicionais
+    if(sigaction(SIGINT, &sa, NULL) == -1){
+        fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do sinal de interrupção.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }
+
+    // configura o tratamento do SIGCHLD
+    sa.sa_handler = handleSIGCHLD;           // define a função de tratamento do sinal
+    sigemptyset(&sa.sa_mask);                // não bloqueia outros sinais
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP; // evita interrupção de chamadas bloqueantes
+    if(sigaction(SIGCHLD, &sa, NULL) == -1){
+        fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do SIGCHLD.\n" RESET);
+
+        exit(EXIT_FAILURE);
+    }
 
     printf("Criando soquete do servidor...\n");
     server_socket = socket(AF_INET, SOCK_STREAM, 0); // soquete TCP/IPv4
@@ -142,6 +321,26 @@ int main(int argc, char **argv){
         }else if(pid == 0){ // processo filho
             close(server_socket); // não aceita novas conexões
 
+            // desconfigura o tratamento do SIGINT
+            sa.sa_handler = SIG_IGN;  // ignora o sinal (não atribui função de tratamento)
+            sigemptyset(&sa.sa_mask); // não bloqueia outros sinais
+            sa.sa_flags = 0;          // sem flags adicionais
+            if(sigaction(SIGINT, &sa, NULL) == -1){
+                fprintf(stderr, RED "ERRO: Falha ao desconfigurar o tratamento do sinal de interrupção.\n" RESET);
+        
+                exit(EXIT_FAILURE);
+            }
+
+            // configura o tratamento do SIGTERM
+            sa.sa_handler = handleSIGTERM; // define a função de tratamento do sinal
+            sigemptyset(&sa.sa_mask);      // não bloqueia outros sinais
+            sa.sa_flags = 0;               // sem flags adicionais
+            if(sigaction(SIGTERM, &sa, NULL) == -1){
+                fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do sinal de término.\n" RESET);
+        
+                exit(EXIT_FAILURE);
+            }
+
             /* lógica de comunicação com o cliente */
             if(pthread_create(&tid_in, NULL, handleMsgIn, &client_id) != 0){
                 fprintf(stderr, RED "ERRO: Falha ao criar thread para escutar o cliente.\n" RESET);
@@ -166,7 +365,7 @@ int main(int argc, char **argv){
 
             printf(BLUE "%s" RESET " saiu do chat!\n", username);
 
-            printf("Encerrando processo filho...\n");
+            printf(YELLOW "Encerrando processo filho...\n" RESET);
 
             pthread_cancel(tid_in);
             pthread_cancel(tid_out);
@@ -174,51 +373,120 @@ int main(int argc, char **argv){
             exit(EXIT_SUCCESS);
         }else{ // processo pai
             close(client_socket); // prepara para estabelecer uma nova conexão
+
+            // armazena o pid do processo filho na lista
+            if(!insertNode(leaves, pid)){
+                fprintf(stderr, RED "ERRO: Falha ao inserir o PID na lista.\n");
+
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+}
+
+
+
+/* FUNÇÕES */
+
+bool checkArgs(int argc, char **argv){
+// função p/ verificar os parâmetros de entrada
+    
+    if(argc < 2){
+        fprintf(stderr, RED "ERRO: Argumentos insuficientes.\n" RESET
+                                "Uso: ./server <porta>\n");
+    
+        return false;
+    }else if(argc > 2){
+        printf(YELLOW "Aviso: Argumentos excedentes.\n" RESET
+                          "Uso: ./server <porta>\n");
+    }
+            
+    for(int i = 0; i < strlen(argv[1]); i++){
+        if(!isdigit(argv[1][i])){
+            fprintf(stderr, RED "ERRO: A porta deve ser um inteiro.\n" RESET);
+    
+            return false;
+        }
+    }
+    
+    if(atoi(argv[1]) > 65535 || atoi(argv[1]) < 0){
+        fprintf(stderr, RED "ERRO: A porta deve ser um inteiro positivo entre 0 e 65535.\n" RESET);
+            
+        return false;
+    }
+    
+    return true;
+}
+
+void handleSIGINT(int signal){
+// função p/ tratar o sinal de interrupção (CTRL + C)
+
+    Node *node;
+
+    printf(YELLOW "\nSinal de interrupção recebido.\n"
+                  "Encerrando aplicação...\n" RESET);
+
+    close(server_socket);
+
+    // encerra os processos filhos (nós folha)
+    if(leaves->qty > 0){
+        node = leaves->root;
+        while(node != NULL){
+            printf("Encerrando processo filho (PID: %d)...\n", node->value);
+
+            kill(node->value, SIGTERM);
+
+            node = node->next;
         }
     }
 
-    printf(YELLOW "Encerrando servidor...\n" RESET);
+    freeList(leaves);
+
+    printf(GREEN "Servidor encerrado com sucesso.\n" RESET);
 
     exit(EXIT_SUCCESS);
 }
 
-/* FUNÇÕES */
-bool checkArgs(int argc, char **argv){
-// função p/ verificar os parâmetros de entrada
+void handleSIGCHLD(int signal){
+// função p/ tratar o SIGCHLD (quando um processo filho encerra)
 
-    if(argc < 2){
-        fprintf(stderr, RED "ERRO: Argumentos insuficientes.\n" RESET
-                            "Uso: ./server <porta>\n");
+    int status;
+    pid_t pid;
 
-        return false;
-    }else if(argc > 2){
-        printf(YELLOW "Aviso: Argumentos excedentes.\n" RESET
-                      "Uso: ./server <porta>\n");
-    }
-        
-    for(int i = 0; i < strlen(argv[1]); i++){
-        if(!isdigit(argv[1][i])){
-            fprintf(stderr, RED "ERRO: A porta deve ser um inteiro.\n" RESET);
+    // "waitpid" com "WNOHANG" evita bloqueio caso não haja filhos para limpar
+    while((pid = waitpid(-1, &status, WNOHANG)) > 0){
+        printf("Filho com PID %d terminou.\n", pid);
 
-            return false;
+        // remove o PID do processo filho na lista
+        if(!removeNode(leaves, pid)){
+            fprintf(stderr, RED "ERRO: Falha ao remover o PID do processo filho na lista.\n" RESET);
+
+            exit(EXIT_FAILURE);
         }
     }
+}
 
-    if(atoi(argv[1]) > 65535 || atoi(argv[1]) < 0){
-        fprintf(stderr, RED "ERRO: A porta deve ser um inteiro positivo entre 0 e 65535.\n" RESET);
-        
-        return false;
-    }
+void handleSIGTERM(int signal){
+// função p/ tratar o sinal de encerramento de processo
 
-    return true;
+    printf(YELLOW "\nSinal de término recebido.\n"
+                  "Encerrando aplicação...\n" RESET);
+    
+    // cancela as threads de comunicação
+    pthread_cancel(tid_in);
+    pthread_cancel(tid_out);
+    
+    printf(GREEN "Processo filho encerrado com sucesso.\n" RESET);
+    
+    exit(EXIT_SUCCESS);
 }
 
 void *handleMsgIn(void *args){
 // função p/ lidar com o recebimento de mensagens do cliente
 
-    struct message msg; // estrutura "mensagem" para I/O
+    Message msg; // estrutura "mensagem" para I/O
     ssize_t recv_bytes; // qtd de bytes recebidos
-    struct client_info *client_id = (struct client_info*) args; // identidade do cliente
+    Client *client_id = (Client*) args; // identidade do cliente
     int client_socket = client_id->client_socket; // soquete do cliente
     char username[16]; // nome de usuário
     strcpy(username, client_id->username);
@@ -254,8 +522,8 @@ void *handleMsgIn(void *args){
 void *handleMsgOut(void *args){
 // função p/ lidar com o envio de mensagens ao cliente
 
-    struct message msg; // estrutura "mensagem" para I/O
-    struct client_info *client_id = (struct client_info*) args; // identidade do cliente
+    Message msg; // estrutura "mensagem" para I/O
+    Client *client_id = (Client*) args; // identidade do cliente
     int client_socket = client_id->client_socket; // soquete do cliente
     int secret = client_id->secret;
     msg.secret = secret;
@@ -276,10 +544,10 @@ void *handleMsgOut(void *args){
     pthread_exit(NULL);
 }
 
-struct client_info clientWrapper(int socket, struct message msg){
+Client clientWrapper(int socket, Message msg){
 // função p/ "embrulhar" as informações do cliente
 
-    struct client_info client_id;
+    Client client_id;
 
     client_id.client_socket = socket;
     strcpy(client_id.username, msg.buffer);
