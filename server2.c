@@ -289,7 +289,6 @@ int main(int argc, char **argv){
     // loop do servidor
     while(true){
         // tenta aceitar uma nova conexão
-        if()
         client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_len);
         if(client_socket == -1){
             fprintf(stderr, RED "ERRO: Falha ao aceitar conexão com um cliente.\n" RESET);
