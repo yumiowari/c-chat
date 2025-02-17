@@ -151,7 +151,7 @@ bool removeNode(List *list, int value){
 
             if(aux != NULL){
                 if(aux->next != NULL){
-                    aux->next = aux->next;
+                    ant->next = aux->next;
                 }else{ // é o último elemento
                     ant->next = NULL;
                 }
