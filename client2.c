@@ -127,7 +127,7 @@ int main(int argc, char **argv){
     sigemptyset(&sa.sa_mask);     // não bloqueia outros sinais
     sa.sa_flags = 0;              // sem flags adicionais
     if(sigaction(SIGINT, &sa, NULL) == -1){
-        fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do sinal de interrupção.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha na configuração do tratamento do SIGINT.\n");
 
         exit(EXIT_FAILURE);
     }
@@ -135,7 +135,7 @@ int main(int argc, char **argv){
     printf("Criando soquete de cliente...\n");
     client_socket = socket(AF_INET, SOCK_STREAM, 0); // soquete TCP/IPv4
     if(client_socket == -1){
-        fprintf(stderr, RED "ERRO: Falha na criação do soquete do servidor.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha na criação do soquete de cliente.\n");
 
         exit(EXIT_FAILURE);
     }
@@ -147,16 +147,16 @@ int main(int argc, char **argv){
 
     printf("Estabelecendo conexão com o servidor...\n");
     if(connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1){
-        fprintf(stderr, RED "ERRO: Falha ao estabelecer conexão com o servidor.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha no estabelecimento de conexão com o servidor.\n");
 
         exit(EXIT_FAILURE);
     }else printf(GREEN "\nConexão estabelecida com o servidor!\n" RESET);
 
-    // informa o nome de usuário e o segredo ao servidor
+    // informa o identidade de cliente ao servidor
     strcpy(msg.buffer, username);
     msg.secret = secret;
     if(send(client_socket, &msg, sizeof(msg), 0) == -1){
-        fprintf(stderr, RED "ERRO: Falha ao informar o nome de usuário e o segredo ao servidor.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha no envio da identidade de cliente ao servidor.\n");
 
         exit(EXIT_FAILURE);
     }
@@ -167,20 +167,21 @@ int main(int argc, char **argv){
 
     /* lógica de comunicação com o servidor */
     if(pthread_create(&tid_in, NULL, handleMsgIn, &client_id) != 0){
-        fprintf(stderr, RED "ERRO: Falha ao criar thread para escutar o servidor.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha na criação da thread para escutar o servidor.\n");
 
         exit(EXIT_FAILURE);
     }
 
     if(pthread_create(&tid_out, NULL, handleMsgOut, &client_id) != 0){
-        fprintf(stderr, RED "ERRO: Falha ao criar thread para falar ao servidor.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha na criação da thread para falar ao servidor.\n");
 
         exit(EXIT_FAILURE);
     }
 
     if(pthread_join(tid_in, NULL) != 0){
     // espera o fim da conexão com o servidor
-        fprintf(stderr, RED "ERRO: Falha ao aguardar a thread de recebimento de mensagens.\n" RESET);
+
+        fprintf(stderr, RED "ERRO: " RESET "Falha no aguardo da thread de recebimento de mensagens.\n");
 
         pthread_cancel(tid_out); // tenta encerrar a thread de envio se a thread de recebimento falhou
 
@@ -204,31 +205,31 @@ bool checkArgs(int argc, char **argv){
 // função p/ verificar os parâmetros de entrada
 
     if(argc < 3){
-        fprintf(stderr, RED "ERRO: Argumentos insuficientes.\n" RESET
+        fprintf(stderr, RED "ERRO: " RESET "Argumentos insuficientes.\n"
                             "Uso: ./client <porta> <nome de usuário>\n");
 
         return false;
     }else if(argc > 3){
-        printf(YELLOW "Aviso: Argumentos excedentes.\n" RESET
+        printf(YELLOW "Aviso: " RESET "Argumentos excedentes.\n"
                       "Uso: ./client <porta> <nome de usuário>\n");
     }
         
     for(int i = 0; i < strlen(argv[1]); i++){
         if(!isdigit(argv[1][i])){
-            fprintf(stderr, RED "ERRO: A porta deve ser um inteiro.\n" RESET);
+            fprintf(stderr, RED "ERRO: " RESET "A porta deve ser um número inteiro.\n");
 
             return false;
         }
     }
 
     if(atoi(argv[1]) > 65535 || atoi(argv[1]) < 0){
-        fprintf(stderr, RED "ERRO: A porta deve ser um inteiro positivo entre 0 e 65535.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "A porta deve ser um número inteiro entre 0 e 65535.\n");
         
         return false;
     }
 
     if(strlen(argv[2]) > 15){
-        fprintf(stderr, RED "ERRO: O nome de usuário não pode exceder 15 caracteres.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "O nome de usuário não pode exceder 15 caracteres.\n");
 
         return false;
     }
@@ -239,7 +240,7 @@ bool checkArgs(int argc, char **argv){
            ((argv[2][i] < 'a') || (argv[2][i] > 'z')) &&
            (argv[2][i] != '_')
           ){
-            fprintf(stderr, RED "ERRO: O nome de usuário contém símbolos proibidos.\n" RESET
+            fprintf(stderr, RED "ERRO: " RESET "O nome de usuário contém símbolos proibidos.\n"
                                 "São caracteres válidos: A-Z a-z _\n");
 
             return false;
@@ -252,8 +253,8 @@ bool checkArgs(int argc, char **argv){
 void handleSIGINT(int signal){
 // função p/ tratar o sinal de interrupção (CTRL + C)
     
-    printf(YELLOW "\nSinal de interrupção recebido.\n"
-                      "Encerrando aplicação...\n" RESET);
+    printf(YELLOW "\nAviso: " RESET "Sinal de interrupção recebido.\n"
+                  "Encerrando aplicação...\n");
     
     // cancela as threads de comunicação
     pthread_cancel(tid_in);
@@ -281,8 +282,8 @@ void *handleMsgIn(void *args){
         
         if(recv_bytes <= 0){
             if(recv_bytes == 0){
-                printf(YELLOW "\nAviso: A conexão com servidor foi perdida.\n" RESET);
-            }else fprintf(stderr, RED "\nERRO: Falha na recepção de dados.\n" RESET);
+                printf(YELLOW "\nAviso: " RESET "A conexão com servidor foi perdida.\n");
+            }else fprintf(stderr, RED "\nERRO: " RESET "Falha na recepção de dados.\n");
 
             break;
         }
@@ -290,7 +291,7 @@ void *handleMsgIn(void *args){
         recv_secret = msg.secret;
 
         if(recv_secret != secret){
-            printf(YELLOW "\nAviso: O servidor terminou a conexão.\n" RESET);
+            printf(YELLOW "\nAviso: " RESET "O servidor terminou a conexão.\n");
 
             break;
         }
@@ -317,7 +318,7 @@ void *handleMsgOut(void *args){
         fgets(msg.buffer, BUFFER_SIZE, stdin);
 
         if(send(client_socket, &msg, sizeof(msg), 0) == -1){
-            fprintf(stderr, RED "ERRO: Falha ao enviar mensagem ao servidor.\n" RESET);
+            fprintf(stderr, RED "ERRO: " RESET "Falha no envio da mensagem ao servidor.\n");
 
             break;
         }

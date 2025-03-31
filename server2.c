@@ -77,7 +77,7 @@ struct message{
 
 /* VARIÁVEIS GLOBAIS */
 
-int server_socket;         // soquete do servidor
+int server_socket;         // soquete de servidor
 pthread_t tid_in, tid_out; // "thread" id
 List *leaves;              // lista de PIDs dos processos filhos (i. e., nós folha)
 
@@ -87,10 +87,10 @@ List *leaves;              // lista de PIDs dos processos filhos (i. e., nós fo
 
 /* ASSINATURAS */
 
-List* makeList(){
+List *makeList(){
 // função p/ alocar o ponteiro para a lista
     
-    List* list = (List*) malloc(sizeof(List));
+    List *list = (List*) malloc(sizeof(List));
     if(list == NULL)return NULL;
 
     list->root = NULL;
@@ -99,10 +99,10 @@ List* makeList(){
     return list;
 }
 
-Node* makeNode(int value){
+Node *makeNode(int value){
 // função p/ alocar o ponteiro para o nó
     
-    Node* new_node = (Node*) malloc(sizeof(Node));
+    Node *new_node = (Node*) malloc(sizeof(Node));
     if(new_node == NULL)return NULL;
 
     new_node->value = value;
@@ -111,12 +111,12 @@ Node* makeNode(int value){
     return new_node;
 }
 
-bool insertNode(List* list, int value){
+bool insertNode(List *list, int value){
 // função p/ inserir um novo nó na lista
 
     if(list == NULL)return false;
 
-    Node* new_node = makeNode(value);
+    Node *new_node = makeNode(value);
     if(new_node == NULL)return false;
 
     if(list->qty > 0){
@@ -132,7 +132,7 @@ bool insertNode(List* list, int value){
     return true;
 }
 
-bool removeNode(List* list, int value){
+bool removeNode(List *list, int value){
 // função p/ remover um nó da lista
 
     if(list == NULL)return false;
@@ -151,7 +151,7 @@ bool removeNode(List* list, int value){
 
             if(aux != NULL){
                 if(aux->next != NULL){
-                    aux->next = aux->next;
+                    ant->next = aux->next;
                 }else{ // é o último elemento
                     ant->next = NULL;
                 }
@@ -170,7 +170,7 @@ bool removeNode(List* list, int value){
     return true;
 }
 
-bool freeList(List* list){
+bool freeList(List *list){
 // função p/ liberar a lista da memória RAM
 
     if(list == NULL)return false;
@@ -244,7 +244,7 @@ int main(int argc, char **argv){
     sigemptyset(&sa.sa_mask);     // não bloqueia outros sinais
     sa.sa_flags = 0;              // sem flags adicionais
     if(sigaction(SIGINT, &sa, NULL) == -1){
-        fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do sinal de interrupção.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha na configuração do tratamento do SIGINT.\n");
 
         exit(EXIT_FAILURE);
     }
@@ -254,34 +254,34 @@ int main(int argc, char **argv){
     sigemptyset(&sa.sa_mask);                // não bloqueia outros sinais
     sa.sa_flags = SA_RESTART | SA_NOCLDSTOP; // evita interrupção de chamadas bloqueantes
     if(sigaction(SIGCHLD, &sa, NULL) == -1){
-        fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do SIGCHLD.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha na configuração do tratamento do SIGCHLD.\n");
 
         exit(EXIT_FAILURE);
     }
 
-    printf("Criando soquete do servidor...\n");
+    printf("Criando soquete de servidor...\n");
     server_socket = socket(AF_INET, SOCK_STREAM, 0); // soquete TCP/IPv4
     if(server_socket == -1){
-        fprintf(stderr, RED "ERRO: Falha na criação do soquete do servidor.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha na criação do soquete de servidor.\n");
 
         exit(EXIT_FAILURE);
     }
 
-    printf("Configurando endereço do servidor...\n");
+    printf("Configurando endereço de servidor...\n");
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY; // aceita requisições de qualquer IP
     server_addr.sin_port = htons(port);
 
-    printf("Vinculando o soquete do servidor à porta %d...\n", port);
+    printf("Vinculando o soquete de servidor à porta " GREEN "%d" RESET "...\n", port);
     if(bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1){
-        fprintf(stderr, RED "ERRO: Falha ao vincular o soquete do servidor à porta %d.\n" RESET, port);
+        fprintf(stderr, RED "ERRO: " RESET "Falha na vinculação do soquete de servidor à porta " RED "%d" RESET ".\n", port);
 
         exit(EXIT_FAILURE);
     }
 
     printf("Iniciando o servidor...\n");
     if(listen(server_socket, 5) == -1){
-        fprintf(stderr, RED "ERRO: Falha ao iniciar o servidor.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "Falha na inicialização do servidor.\n");
 
         exit(EXIT_FAILURE);
     }else printf(GREEN "\nServidor on-line e ouvindo na porta %d!\n" RESET, port);
@@ -291,14 +291,14 @@ int main(int argc, char **argv){
         // tenta aceitar uma nova conexão
         client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_len);
         if(client_socket == -1){
-            fprintf(stderr, RED "ERRO: Falha ao aceitar conexão com um cliente.\n" RESET);
+            fprintf(stderr, RED "ERRO: " RESET "Falha no estabelecimento de conexão com o cliente.\n");
 
             continue; // tenta novamente
         }
 
         // configura a identidade do cliente
         if(recv(client_socket, &msg, sizeof(msg), 0) <= 0){
-            fprintf(stderr, RED "ERRO: Falha ao receber a identidade do cliente.\n" RESET);
+            fprintf(stderr, RED "ERRO: " RESET "Falha na recepção da identidade do cliente.\n");
 
             exit(EXIT_FAILURE);
         }
@@ -307,26 +307,28 @@ int main(int argc, char **argv){
         strcpy(username, client_id.username);
         secret = client_id.secret;
 
-        printf(BLUE "%s" RESET " se juntou ao chat!\n", username);
+        printf(BLUE "%s" RESET " juntou-se ao chat!\n", username);
     
         pid = fork();
 
         if(pid == -1){ // fork() falhou
-            fprintf(stderr, RED "ERRO: Criação do processo filho falhou\n" RESET
-                                "Conexão com o cliente encerrada.\n");
+            fprintf(stderr, RED "ERRO: " RESET "Criação do processo filho falhou\n"
+                                "A conexão com o cliente foi encerrada.\n");
 
             close(client_socket);
 
-            continue;
-        }else if(pid == 0){ // processo filho
+            continue; // tenta estabelecer uma nova conexão
+        }else if(pid == 0){ // fork() sucedeu
+        // contexto do processo filho
+
             close(server_socket); // não aceita novas conexões
 
-            // desconfigura o tratamento do SIGINT
+            // configura o tratamento do SIGINT
             sa.sa_handler = SIG_IGN;  // ignora o sinal (não atribui função de tratamento)
             sigemptyset(&sa.sa_mask); // não bloqueia outros sinais
             sa.sa_flags = 0;          // sem flags adicionais
             if(sigaction(SIGINT, &sa, NULL) == -1){
-                fprintf(stderr, RED "ERRO: Falha ao desconfigurar o tratamento do sinal de interrupção.\n" RESET);
+                fprintf(stderr, RED "ERRO: " RESET "Falha na configuração do tratamento do SIGINT.\n");
         
                 exit(EXIT_FAILURE);
             }
@@ -336,27 +338,28 @@ int main(int argc, char **argv){
             sigemptyset(&sa.sa_mask);      // não bloqueia outros sinais
             sa.sa_flags = 0;               // sem flags adicionais
             if(sigaction(SIGTERM, &sa, NULL) == -1){
-                fprintf(stderr, RED "ERRO: Falha ao configurar o tratamento do sinal de término.\n" RESET);
+                fprintf(stderr, RED "ERRO: " RESET "Falha na configuração do tratamento do SIGTERM.\n");
         
                 exit(EXIT_FAILURE);
             }
 
             /* lógica de comunicação com o cliente */
             if(pthread_create(&tid_in, NULL, handleMsgIn, &client_id) != 0){
-                fprintf(stderr, RED "ERRO: Falha ao criar thread para escutar o cliente.\n" RESET);
+                fprintf(stderr, RED "ERRO: " RESET "Falha na criação da thread para escutar o cliente.\n");
 
                 exit(EXIT_FAILURE);
             }
 
             if(pthread_create(&tid_out, NULL, handleMsgOut, &client_id) != 0){
-                fprintf(stderr, RED "ERRO: Falha ao criar thread para falar ao cliente.\n" RESET);
+                fprintf(stderr, RED "ERRO: " RESET "Falha na criação da thread para falar ao cliente.\n");
 
                 exit(EXIT_FAILURE);
             }
                 
             if(pthread_join(tid_in, NULL) != 0){
             // espera o fim da conexão com o cliente
-                fprintf(stderr, RED "ERRO: Falha ao aguardar a thread de recebimento de mensagens.\n" RESET);
+
+                fprintf(stderr, RED "ERRO: " RESET "Falha no aguardo da thread de recebimento de mensagens.\n");
 
                 pthread_cancel(tid_out); // tenta encerrar a thread de envio se a thread de recebimento falhou
 
@@ -367,16 +370,19 @@ int main(int argc, char **argv){
 
             printf(YELLOW "Encerrando processo filho...\n" RESET);
 
+            // cancela as threads de comunicação
             pthread_cancel(tid_in);
             pthread_cancel(tid_out);
 
             exit(EXIT_SUCCESS);
-        }else{ // processo pai
+        }else{ // fork() sucedeu
+        // contexto do processo pai
+
             close(client_socket); // prepara para estabelecer uma nova conexão
 
-            // armazena o pid do processo filho na lista
+            // armazena o PID do processo filho na lista
             if(!insertNode(leaves, pid)){
-                fprintf(stderr, RED "ERRO: Falha ao inserir o PID na lista.\n");
+                fprintf(stderr, RED "ERRO: " RESET "Falha na inserção do PID do processo filho na lista.\n");
 
                 exit(EXIT_FAILURE);
             }
@@ -392,25 +398,25 @@ bool checkArgs(int argc, char **argv){
 // função p/ verificar os parâmetros de entrada
     
     if(argc < 2){
-        fprintf(stderr, RED "ERRO: Argumentos insuficientes.\n" RESET
-                                "Uso: ./server <porta>\n");
+        fprintf(stderr, RED "ERRO: " RESET "Argumentos insuficientes.\n"
+                            "Uso: ./server <porta>\n");
     
         return false;
     }else if(argc > 2){
-        printf(YELLOW "Aviso: Argumentos excedentes.\n" RESET
-                          "Uso: ./server <porta>\n");
+        printf(YELLOW "Aviso: " RESET "Argumentos excedentes.\n"
+                      "Uso: ./server <porta>\n");
     }
             
     for(int i = 0; i < strlen(argv[1]); i++){
         if(!isdigit(argv[1][i])){
-            fprintf(stderr, RED "ERRO: A porta deve ser um inteiro.\n" RESET);
+            fprintf(stderr, RED "ERRO: " RESET "A porta deve ser um número inteiro.\n");
     
             return false;
         }
     }
     
     if(atoi(argv[1]) > 65535 || atoi(argv[1]) < 0){
-        fprintf(stderr, RED "ERRO: A porta deve ser um inteiro positivo entre 0 e 65535.\n" RESET);
+        fprintf(stderr, RED "ERRO: " RESET "A porta deve ser um número inteiro entre 0 e 65535.\n");
             
         return false;
     }
@@ -423,8 +429,8 @@ void handleSIGINT(int signal){
 
     Node *node;
 
-    printf(YELLOW "\nSinal de interrupção recebido.\n"
-                  "Encerrando aplicação...\n" RESET);
+    printf(YELLOW "\nAviso: " RESET "Sinal de interrupção recebido.\n"
+                  "Encerrando aplicação...\n");
 
     close(server_socket);
 
@@ -432,7 +438,7 @@ void handleSIGINT(int signal){
     if(leaves->qty > 0){
         node = leaves->root;
         while(node != NULL){
-            printf("Encerrando processo filho (PID: %d)...\n", node->value);
+            printf(YELLOW "Aviso: " RESET "Encerrando processo filho (PID: " YELLOW "%d" RESET ")...\n", node->value);
 
             kill(node->value, SIGTERM);
 
@@ -455,11 +461,11 @@ void handleSIGCHLD(int signal){
 
     // "waitpid" com "WNOHANG" evita bloqueio caso não haja filhos para limpar
     while((pid = waitpid(-1, &status, WNOHANG)) > 0){
-        printf("Filho com PID %d terminou.\n", pid);
+        printf(YELLOW "\nAviso: " RESET "Filho com PID " YELLOW "%d" RESET " terminou.\n", pid);
 
-        // remove o PID do processo filho na lista
+        // remove o PID do processo filho da lista
         if(!removeNode(leaves, pid)){
-            fprintf(stderr, RED "ERRO: Falha ao remover o PID do processo filho na lista.\n" RESET);
+            fprintf(stderr, RED "ERRO: " RESET "Falha na remoção do PID do processo filho da lista.\n");
 
             exit(EXIT_FAILURE);
         }
@@ -469,8 +475,8 @@ void handleSIGCHLD(int signal){
 void handleSIGTERM(int signal){
 // função p/ tratar o sinal de encerramento de processo
 
-    printf(YELLOW "\nSinal de término recebido.\n"
-                  "Encerrando aplicação...\n" RESET);
+    printf(YELLOW "\nAviso: " RESET "Sinal de término recebido.\n"
+                  "Encerrando aplicação...\n");
     
     // cancela as threads de comunicação
     pthread_cancel(tid_in);
@@ -497,8 +503,8 @@ void *handleMsgIn(void *args){
         
         if(recv_bytes <= 0){
             if(recv_bytes == 0){
-                printf(YELLOW "Aviso: A conexão com " BLUE "%s" YELLOW " foi perdida.\n" RESET, username);
-            }else fprintf(stderr, RED "ERRO: Falha na recepção de dados.\n" RESET);
+                printf(YELLOW "Aviso: " RESET "A conexão com " BLUE "%s" RESET " foi perdida.\n", username);
+            }else fprintf(stderr, RED "ERRO: " RESET "Falha na recepção de dados.\n");
 
             break;
         }
@@ -506,7 +512,7 @@ void *handleMsgIn(void *args){
         if(msg.secret == secret){
             printf(MAGENTA "%s" RESET ": %s", username, msg.buffer);
         }else{
-            fprintf(stderr, RED "ERRO: Código de segurança inválido para o cliente " BLUE "%s.\n" RESET, username);
+            fprintf(stderr, RED "ERRO: " RESET "Código de segurança inválido para o cliente " BLUE "%s" RESET ".\n", username);
 
             break;
         }
@@ -531,7 +537,7 @@ void *handleMsgOut(void *args){
 
     while(true){
         if(send(client_socket, &msg, sizeof(msg), 0) == -1){
-            fprintf(stderr, RED "ERRO: Falha ao enviar mensagem ao cliente.\n" RESET);
+            fprintf(stderr, RED "ERRO: " RESET "Falha no envio de mensagem ao cliente.\n");
 
             break;
         }
