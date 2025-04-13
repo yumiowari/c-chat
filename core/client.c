@@ -13,19 +13,22 @@
 /*
  *   Bibliotecas
  */
-#include <stdlib.h> // exit()
+#include <stdlib.h>     // exit()
 #include <stdio.h>
 #include <stdbool.h>
-#include <unistd.h> // close()
-#include <arpa/inet.h> // inet_pton(), htons(), etc.
+#include <unistd.h>     // close()
+#include <arpa/inet.h>  // inet_pton(), htons(), etc.
 #include <sys/socket.h> // socket(), connect(), bind(), listen(), accept()
 #include <netinet/in.h> // struct sockaddr_in
+#include <omp.h>        // OpenMP
+#include <string.h>     // strcmp()
 
 /*
  *   Definições
  */
 #define PORT 8080
 #define SERVER_IP "127.0.0.1"
+#define BUFFER_SIZE 1024
 
 /*
  *   Variáveis Globais
@@ -37,7 +40,7 @@
 
  int main(int argc, char **argv){
     int client_fd;
-    struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
+    struct sockaddr_in server_addr;       // endereço do servidor, especialmente para IPv4
         struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
         = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
@@ -68,6 +71,40 @@
     }
 
     printf("Conexão estabelecida com o servidor.\n");
+
+    // lógica de comunicação
+    #pragma omp parallel sections
+    {
+        #pragma omp section
+        {
+        // entrada
+            
+        }
+
+        #pragma omp section
+        {
+        // saída
+
+            char buffer[BUFFER_SIZE];
+
+            while(true){
+                #pragma omp critical
+                scanf("%s", buffer);
+                
+                if(strcmp(buffer, "/q") == 0)
+                    break;
+
+                ssize_t sent = send(client_fd,
+                                    buffer,
+                                    strlen(buffer) + 1,
+                                    0);
+                if(sent < 0)
+                    break;
+            }    
+        }
+    }
+
+    close(client_fd); // encerra a conexão e notifica o servidor
 
     exit(EXIT_SUCCESS);
 }
