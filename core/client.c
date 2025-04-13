@@ -22,6 +22,8 @@
 #include <netinet/in.h> // struct sockaddr_in
 #include <omp.h>        // OpenMP
 #include <string.h>     // strcmp()
+#include <signal.h>
+#include <stdatomic.h>
 
 /*
  *   Definições
@@ -33,17 +35,23 @@
 /*
  *   Variáveis Globais
  */
+int client_fd;
+volatile atomic_bool running = true;
 
 /*
  *   Assinaturas
  */
+void handleSIGINT(int signal);
+// função p/ tratar o sinal de interrupção (CTRL + C)
 
- int main(int argc, char **argv){
-    int client_fd;
-    struct sockaddr_in server_addr;       // endereço do servidor, especialmente para IPv4
-        struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
-        = (struct sockaddr*)&server_addr;
+int main(int argc, char **argv){
+    struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
+    struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
+    = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
+
+    // configura o tratamento de sinais...
+    signal(SIGINT, handleSIGINT);
 
     // cria o soquete do cliente...
     client_fd = socket(AF_INET,     // com protocolo IPv4 e
@@ -87,20 +95,17 @@
 
             char buffer[BUFFER_SIZE];
 
-            while(true){
+            while(running){
                 #pragma omp critical
                 scanf("%s", buffer);
-                
-                if(strcmp(buffer, "/q") == 0)
-                    break;
 
                 ssize_t sent = send(client_fd,
                                     buffer,
-                                    strlen(buffer) + 1,
+                                    strlen(buffer),
                                     0);
-                if(sent < 0)
-                    break;
-            }    
+                if(sent < 0) // em caso de erro, send() retorna -1
+                    exit(EXIT_FAILURE);
+            }
         }
     }
 
@@ -112,3 +117,15 @@
 /*
  *   Funções
  */
+void handleSIGINT(int signal){
+// função p/ tratar o sinal de interrupção (CTRL + C)
+
+    printf("\nSinal de interrupção recebido.\n"
+           "\nEncerrando aplicação...\n");
+
+    close(client_fd);
+
+    running = false; // encerra os laços de repetição
+
+    exit(EXIT_SUCCESS);
+}

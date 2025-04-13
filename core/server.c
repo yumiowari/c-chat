@@ -22,6 +22,9 @@
 #include <netinet/in.h> // struct sockaddr_in
 #include <omp.h>        // OpenMP
 #include <string.h>
+#include <signal.h>
+#include <wait.h>       // waitpid()
+#include <stdatomic.h>
 
 /*
  *   Definições
@@ -32,18 +35,31 @@
 /*
  *   Variáveis Globais
  */
+int server_fd,
+    client_fd;
+volatile atomic_bool running = true;
 
 /*
  *   Assinaturas
  */
+void handleSIGINT(int signal);
+// função p/ tratar o sinal de interrupção (CTRL + C)
+
+void handleSIGCHLD(int signal);
+// função p/ tratar o SIGCHLD (quando um processo filho encerra)
+
+void handleSIGTERM(int signal);
+// função p/ tratar o sinal de encerramento de processo
 
 int main(int argc, char **argv){
-    int server_fd,
-        client_fd;
-        struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
-        struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
-        = (struct sockaddr*)&server_addr;
+    struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
+    struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
+    = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
+
+    // configura o tratamento de sinais...
+    signal(SIGINT,  handleSIGINT);
+    signal(SIGCHLD, handleSIGCHLD);
 
     // cria o soquete do servidor...
     server_fd = socket(AF_INET,     // com protocolo IPv4 e
@@ -74,7 +90,7 @@ int main(int argc, char **argv){
 
     printf("Servidor on-line e ouvindo na porta %d!\n", PORT);
 
-    while(true){
+    while(running){
     // loop do servidor
 
         // aceita uma nova conexão...
@@ -97,6 +113,10 @@ int main(int argc, char **argv){
         // processo filho
         
             close(server_fd); // não aceita novas conexões
+
+            // configura tratamento de sinais
+            signal(SIGINT,  SIG_IGN);
+            signal(SIGTERM, handleSIGTERM);
             
             // lógica de comunicação
             #pragma omp parallel sections
@@ -107,7 +127,7 @@ int main(int argc, char **argv){
 
                     char buffer[BUFFER_SIZE];
 
-                    while(true){
+                    while(running){
                         ssize_t rcvd = recv(client_fd,
                                             buffer,
                                             BUFFER_SIZE,
@@ -153,3 +173,35 @@ int main(int argc, char **argv){
 /*
  *   Funções
  */
+void handleSIGINT(int signal){
+// função p/ tratar o sinal de interrupção (CTRL + C)
+
+    printf("\nSinal de interrupção recebido.\n"
+           "\nEncerrando aplicação...\n");
+
+    close(server_fd);
+
+    running = false;
+
+    exit(EXIT_SUCCESS);
+}
+
+void handleSIGCHLD(int signal){
+// função p/ tratar o SIGCHLD (quando um processo filho encerra)
+
+    int status;
+    pid_t pid;
+
+    while((pid = waitpid(-1, &status, WNOHANG)) > 0){
+        printf("\nProcesso filho com PID %d terminou.\n", pid);
+    }
+}
+
+void handleSIGTERM(int signal){
+// função p/ tratar o sinal de encerramento de processo
+
+    printf("\nSinal de término recebido.\n"
+           "\nEncerrando processo filho...\n"); // no contexto do processo filho
+
+    exit(EXIT_SUCCESS);
+}
