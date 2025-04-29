@@ -14,17 +14,17 @@
  *   Bibliotecas
  */
 #include <stdlib.h>     // exit()
-#include <stdio.h>
-#include <stdbool.h>
+#include <stdio.h>      // I/O
+#include <stdbool.h>    // bool typedef
 #include <unistd.h>     // close()
 #include <arpa/inet.h>  // inet_pton(), htons(), etc.
 #include <sys/socket.h> // socket(), connect(), bind(), listen(), accept()
 #include <netinet/in.h> // struct sockaddr_in
 #include <omp.h>        // OpenMP
-#include <string.h>
-#include <signal.h>
+#include <string.h>     // memset()
+#include <signal.h>     // signal()
 #include <wait.h>       // waitpid()
-#include <stdatomic.h>
+#include <stdatomic.h>  // atomic_bool typedef
 
 /*
  *   Definições

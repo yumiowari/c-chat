@@ -14,16 +14,17 @@
  *   Bibliotecas
  */
 #include <stdlib.h>     // exit()
-#include <stdio.h>
-#include <stdbool.h>
+#include <stdio.h>      // I/O
+#include <stdbool.h>    // bool typedef
 #include <unistd.h>     // close()
 #include <arpa/inet.h>  // inet_pton(), htons(), etc.
 #include <sys/socket.h> // socket(), connect(), bind(), listen(), accept()
 #include <netinet/in.h> // struct sockaddr_in
 #include <omp.h>        // OpenMP
 #include <string.h>     // strcmp()
-#include <signal.h>
-#include <stdatomic.h>
+#include <signal.h>     // signal()
+#include <stdatomic.h>  // atomic_bool typedef
+#include <sys/select.h> // select()
 
 /*
  *   Definições
@@ -31,6 +32,7 @@
 #define PORT 8080
 #define SERVER_IP "127.0.0.1"
 #define BUFFER_SIZE 1024
+#define TIMEOUT_SEC 1
 
 /*
  *   Variáveis Globais
@@ -94,17 +96,34 @@ int main(int argc, char **argv){
         // saída
 
             char buffer[BUFFER_SIZE];
+            struct timeval timeout;
 
             while(running){
-                #pragma omp critical
-                scanf("%s", buffer);
+                fd_set fds;
 
-                ssize_t sent = send(client_fd,
-                                    buffer,
-                                    strlen(buffer),
-                                    0);
-                if(sent < 0) // em caso de erro, send() retorna -1
-                    exit(EXIT_FAILURE);
+                FD_ZERO(&fds);
+                FD_SET(STDIN_FILENO, &fds); // atribui stdin ao conjunto de file descriptors
+                
+                timeout.tv_sec = TIMEOUT_SEC;
+                timeout.tv_usec = 0;
+
+                int ready = select(STDIN_FILENO + 1, &fds, NULL, NULL, &timeout);
+                
+                if(ready > 0){
+                    #pragma omp critical
+                    scanf("%s", buffer);
+
+                    ssize_t sent = send(client_fd,
+                                        buffer,
+                                        strlen(buffer),
+                                        0);
+                    if(sent < 0) // em caso de erro, send() retorna -1
+                        exit(EXIT_FAILURE);
+                }else if(ready == 0){
+                    continue;
+                }else{
+                    // erro
+                }
             }
         }
     }
