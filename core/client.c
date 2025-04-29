@@ -25,6 +25,7 @@
 #include <signal.h>     // signal()
 #include <stdatomic.h>  // atomic_bool typedef
 #include <sys/select.h> // select()
+#include <errno.h>      // nº do último erro
 
 /*
  *   Definições
@@ -46,11 +47,18 @@ volatile atomic_bool running = true;
 void handleSIGINT(int signal);
 // função p/ tratar o sinal de interrupção (CTRL + C)
 
+void gracefulShutdown();
+// rotina de encerramento gracioso
+
+void crashLanding(char *e);
+// rotina de encerramento em caso de falha
+
 int main(int argc, char **argv){
     struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
     struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
+    char error[1024];
 
     // configura o tratamento de sinais...
     signal(SIGINT, handleSIGINT);
@@ -60,7 +68,10 @@ int main(int argc, char **argv){
                        SOCK_STREAM, // baseado em conexão
                        0);
     if(client_fd == -1){
-        exit(EXIT_FAILURE);
+        strcat(error, "Falha na criação do soquete de cliente: ");
+        strcat(error, strerror(errno));
+
+        crashLanding(error);
     }
 
     // define o endereço do servidor...
@@ -69,7 +80,10 @@ int main(int argc, char **argv){
                  SERVER_IP,             // no endereço IP localhost
                  &server_addr.sin_addr
                 ) <= 0){
-        exit(EXIT_FAILURE);
+        strcpy(error, "Falha na definição do endereço do servidor: ");
+        strcat(error, strerror(errno));
+
+        crashLanding(error);
     }
     server_addr.sin_port = htons(PORT); // e porta 8080
 
@@ -77,7 +91,10 @@ int main(int argc, char **argv){
     if(connect(client_fd,
                server_addr_ptr,
                server_addr_len) < 0){
-        exit(EXIT_FAILURE);
+        strcpy(error, "Falha na tentativa de conexão com o servidor: ");
+        strcat(error, strerror(errno));
+                
+        crashLanding(error);
     }
 
     printf("Conexão estabelecida com o servidor.\n");
@@ -88,7 +105,30 @@ int main(int argc, char **argv){
         #pragma omp section
         {
         // entrada
-            
+        
+            char buffer[BUFFER_SIZE];
+
+            while(running){
+                ssize_t rcvd = recv(client_fd,
+                                    buffer,
+                                    BUFFER_SIZE,
+                                0);
+
+                if(rcvd <= 0){
+                    if(rcvd == 0){
+                    // conexão perdida
+
+                        printf("Conexão perdida com o servidor.\n");
+
+                        break;
+                    }else{
+                        strcpy(error, "Falha no recebimento de mensagem do servidor: ");
+                        strcat(error, strerror(errno));
+                                
+                        crashLanding(error);
+                    }
+                }
+            }
         }
 
         #pragma omp section
@@ -117,18 +157,25 @@ int main(int argc, char **argv){
                                         buffer,
                                         strlen(buffer),
                                         0);
-                    if(sent < 0) // em caso de erro, send() retorna -1
-                        exit(EXIT_FAILURE);
+                    if(sent < 0){ // em caso de erro, send() retorna -1
+                        strcpy(error, "Falha no envio de mensagem ao servidor: ");
+                        strcat(error, strerror(errno));
+                                
+                        crashLanding(error);
+                    }
                 }else if(ready == 0){
                     continue;
                 }else{
-                    // erro
+                    strcpy(error, "Falha na verificação da entrada padrão: ");
+                    strcat(error, strerror(errno));
+                                
+                    crashLanding(error);
                 }
             }
         }
     }
 
-    close(client_fd); // encerra a conexão e notifica o servidor
+    gracefulShutdown();
 
     exit(EXIT_SUCCESS);
 }
@@ -142,9 +189,31 @@ void handleSIGINT(int signal){
     printf("\nSinal de interrupção recebido.\n"
            "\nEncerrando aplicação...\n");
 
+    gracefulShutdown();
+
+    exit(EXIT_SUCCESS);
+}
+
+void gracefulShutdown(){
+// rotina de encerramento gracioso
+
     close(client_fd);
 
     running = false; // encerra os laços de repetição
 
     exit(EXIT_SUCCESS);
+}
+
+void crashLanding(char *e){
+// rotina de encerramento em caso de falha
+
+    fprintf(stderr, strcat(e, "\n"));
+
+    fprintf(stderr, "Fim abrupto da aplicação.\n");
+
+    close(client_fd);
+
+    running = false;
+
+    exit(EXIT_FAILURE);
 }

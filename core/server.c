@@ -25,6 +25,7 @@
 #include <signal.h>     // signal()
 #include <wait.h>       // waitpid()
 #include <stdatomic.h>  // atomic_bool typedef
+#include <errno.h>      // nº do último erro
 
 /*
  *   Definições
@@ -51,41 +52,57 @@ void handleSIGCHLD(int signal);
 void handleSIGTERM(int signal);
 // função p/ tratar o sinal de encerramento de processo
 
+void gracefulShutdown(int context);
+// rotina de encerramento gracioso
+
+void crashLanding(int context, char *e);
+// rotina de encerramento em caso de falha
+
 int main(int argc, char **argv){
     struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
     struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
+    char error[1024];
 
     // configura o tratamento de sinais...
     signal(SIGINT,  handleSIGINT);
     signal(SIGCHLD, handleSIGCHLD);
 
-    // cria o soquete do servidor...
+    // cria o soquete de servidor...
     server_fd = socket(AF_INET,     // com protocolo IPv4 e
                        SOCK_STREAM, // baseado em conexão
                        0);
     if(server_fd == -1){
-        exit(EXIT_FAILURE);
+        strcpy(error, "Falha na criação do soquete de servidor: ");
+        strcat(error, strerror(errno));
+                                
+        crashLanding(0, error);
     }
 
-    // define o endereço do servidor...
+    // define o endereço de servidor...
     server_addr.sin_family = AF_INET;         // para protocolo IPv4,
     server_addr.sin_addr.s_addr = INADDR_ANY; // de qualquer origem
     server_addr.sin_port = htons(PORT);       // e porta 8080
 
     // vincula...
-    if(bind(server_fd,                      // o file desciptor do soquete do servidor
+    if(bind(server_fd,       // o file desciptor do soquete do servidor
             server_addr_ptr, // ao endereço do servidor
             server_addr_len) < 0){
-        exit(EXIT_FAILURE);
+        strcpy(error, "Falha de definição do endereço de servidor: ");
+        strcat(error, strerror(errno));
+                                
+        crashLanding(0, error);
     }
 
     // declara intenção de escutar novas conexões...
     if(listen(server_fd, // no soquete do servidor com
               5          // fila limite de 5 requisições
              ) < 0){
-        exit(EXIT_FAILURE);
+        strcpy(error, "Falha na tentativa de conexão com o cliente: ");
+        strcat(error, strerror(errno));
+                                        
+        crashLanding(0, error);
     }
 
     printf("Servidor on-line e ouvindo na porta %d!\n", PORT);
@@ -108,7 +125,10 @@ int main(int argc, char **argv){
         if(pid < 0){
         // fork() falhou
         
-            exit(EXIT_FAILURE);
+            strcpy(error, "Falha na criação do processo para comunicação com o cliente: ");
+            strcat(error, strerror(errno));
+                                    
+            crashLanding(0, error);
         }else if(pid == 0){
         // processo filho
         
@@ -119,7 +139,7 @@ int main(int argc, char **argv){
             signal(SIGTERM, handleSIGTERM);
             
             // lógica de comunicação
-            #pragma omp parallel sections
+            #pragma omp parallel sections nowait
             {
                 #pragma omp section
                 {
@@ -136,10 +156,15 @@ int main(int argc, char **argv){
                         if(rcvd <= 0){
                             if(rcvd == 0){
                             // conexão perdida
+
+                                printf("Conexão perdida com o cliente.\n");
                             
                                 break;
                             }else{
-                                exit(EXIT_FAILURE);
+                                strcpy(error, "Falha no recebimento de mensagem do cliente: ");
+                                strcat(error, strerror(errno));
+                                                        
+                                crashLanding(1, error);
                             }
                         }
                             
@@ -156,6 +181,21 @@ int main(int argc, char **argv){
                 {
                 // saída
 
+                    while(running){
+                        ssize_t sent = send(client_fd,
+                                            "ok",
+                                            strlen("ok"),
+                                            0);
+
+                        if(sent < 0){ // em caso de erro, send() retorna -1
+                            strcpy(error, "Falha no envio de mensagem ao cliente: ");
+                            strcat(error, strerror(errno));
+                                                    
+                            crashLanding(1, error);
+                        }
+
+                        sleep(1);
+                    }
                 }
             }
 
@@ -179,9 +219,7 @@ void handleSIGINT(int signal){
     printf("\nSinal de interrupção recebido.\n"
            "\nEncerrando aplicação...\n");
 
-    close(server_fd);
-
-    running = false;
+    gracefulShutdown(0);
 
     exit(EXIT_SUCCESS);
 }
@@ -203,5 +241,60 @@ void handleSIGTERM(int signal){
     printf("\nSinal de término recebido.\n"
            "\nEncerrando processo filho...\n"); // no contexto do processo filho
 
+    gracefulShutdown(0);
+
     exit(EXIT_SUCCESS);
+}
+
+void gracefulShutdown(int context){
+// rotina de encerramento gracioso
+
+    switch(context){
+        case 0: // processo pai
+
+            close(server_fd);
+
+            running = false; // encerra os laços de repetição
+
+            break;
+
+        case 1: // processo filho
+
+            close(client_fd);
+        
+            running = false;
+
+            break;
+    }
+    
+    exit(EXIT_SUCCESS);
+}
+    
+void crashLanding(int context, char *e){
+// rotina de encerramento em caso de falha
+
+    switch(context){
+        case 0: // processo pai
+
+            fprintf(stderr, strcat(e, "\n"));
+
+            fprintf(stderr, "Fim abrupto da aplicação.\n");
+
+            close(server_fd);
+
+            running = false;
+
+            break;
+
+        case 1: // processo filho
+            fprintf(stderr, "Fim abrupto do processo %d.\n", getpid());
+
+            close(client_fd);
+
+            running = false;
+
+            break;
+    }
+    
+    exit(EXIT_FAILURE);
 }
