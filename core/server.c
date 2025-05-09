@@ -8,12 +8,10 @@
  * 
  */
 
-
- 
 /*
  *   Bibliotecas
  */
-#include <stdlib.h>     // exit()
+#include <stdlib.h>     // multiprocessing, exit()
 #include <stdio.h>      // I/O
 #include <stdbool.h>    // bool typedef
 #include <unistd.h>     // close()
@@ -32,6 +30,7 @@
  */
 #define PORT 8080
 #define BUFFER_SIZE 1024
+#define MAX_CHILDREN 1024
 
 /*
  *   Variáveis Globais
@@ -39,6 +38,8 @@
 int server_fd,
     client_fd;
 volatile atomic_bool running = true;
+pid_t children[MAX_CHILDREN]; // array de PIDs dos processos filhos
+int children_qty = 0;         // contador de filhos (solução temporária)
 
 /*
  *   Assinaturas
@@ -58,12 +59,18 @@ void gracefulShutdown(int context);
 void crashLanding(int context, char *e);
 // rotina de encerramento em caso de falha
 
+void killOffspring();
+// função p/ matar os processos filhos
+
 int main(int argc, char **argv){
     struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
     struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
     char error[1024];
+
+    // configura o array de PIDs de processos filhos
+    memset(children, -1, MAX_CHILDREN);
 
     // configura o tratamento de sinais...
     signal(SIGINT,  handleSIGINT);
@@ -107,7 +114,7 @@ int main(int argc, char **argv){
 
     printf("Servidor on-line e ouvindo na porta %d!\n", PORT);
 
-    while(running){
+    while(running == true){
     // loop do servidor
 
         // aceita uma nova conexão...
@@ -139,7 +146,7 @@ int main(int argc, char **argv){
             signal(SIGTERM, handleSIGTERM);
             
             // lógica de comunicação
-            #pragma omp parallel sections nowait
+            #pragma omp parallel sections
             {
                 #pragma omp section
                 {
@@ -147,7 +154,8 @@ int main(int argc, char **argv){
 
                     char buffer[BUFFER_SIZE];
 
-                    while(running){
+                    while(running == true){
+
                         ssize_t rcvd = recv(client_fd,
                                             buffer,
                                             BUFFER_SIZE,
@@ -159,7 +167,7 @@ int main(int argc, char **argv){
 
                                 printf("Conexão perdida com o cliente.\n");
                             
-                                break;
+                                gracefulShutdown(1);
                             }else{
                                 strcpy(error, "Falha no recebimento de mensagem do cliente: ");
                                 strcat(error, strerror(errno));
@@ -181,7 +189,8 @@ int main(int argc, char **argv){
                 {
                 // saída
 
-                    while(running){
+                    while(running == true){
+
                         ssize_t sent = send(client_fd,
                                             "ok",
                                             strlen("ok"),
@@ -192,9 +201,9 @@ int main(int argc, char **argv){
                             strcat(error, strerror(errno));
                                                     
                             crashLanding(1, error);
+                        }else{
+                            sleep(1);
                         }
-
-                        sleep(1);
                     }
                 }
             }
@@ -204,6 +213,11 @@ int main(int argc, char **argv){
         // processo pai
 
             close(client_fd); // prepara para estabelecer novas conexões
+
+            // insere o PID do processo filho no array
+            children[children_qty] = pid;
+
+            children_qty++;
         }
     }
 
@@ -232,6 +246,17 @@ void handleSIGCHLD(int signal){
 
     while((pid = waitpid(-1, &status, WNOHANG)) > 0){
         printf("\nProcesso filho com PID %d terminou.\n", pid);
+
+        for(int i = 0; i < children_qty; i++){ // O(n * m)
+            if(children[i] == pid){
+                for(int j = i; j < children_qty - 1; j++)
+                    children[j] = children[j + 1];
+
+                children_qty--;
+
+                break;
+            }
+        }
     }
 }
 
@@ -249,20 +274,24 @@ void handleSIGTERM(int signal){
 void gracefulShutdown(int context){
 // rotina de encerramento gracioso
 
+    //printf("Iniciando rotina de encerramento gracioso...\n");
+
     switch(context){
         case 0: // processo pai
 
-            close(server_fd);
-
             running = false; // encerra os laços de repetição
+
+            killOffspring();
+
+            close(server_fd);
 
             break;
 
         case 1: // processo filho
 
-            close(client_fd);
-        
             running = false;
+
+            close(client_fd);
 
             break;
     }
@@ -280,21 +309,36 @@ void crashLanding(int context, char *e){
 
             fprintf(stderr, "Fim abrupto da aplicação.\n");
 
-            close(server_fd);
-
             running = false;
+
+            killOffspring();
+
+            close(server_fd);
 
             break;
 
         case 1: // processo filho
+
             fprintf(stderr, "Fim abrupto do processo %d.\n", getpid());
 
-            close(client_fd);
-
             running = false;
+
+            close(client_fd);
 
             break;
     }
     
     exit(EXIT_FAILURE);
+}
+
+void killOffspring(){
+// função p/ matar os processos filhos
+
+    for(int i = 0; i < children_qty; i++){
+        if(kill(children[i], SIGTERM) == -1){
+            fprintf(stderr, "Falha ao enviar SIGTERM para o processo filho %d: %s\n", children[i], strerror(errno));
+        }else{
+            printf("Encerrando processo filho %d...\n", children[i]);
+        }
+    }
 }

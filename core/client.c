@@ -8,8 +8,6 @@
  * 
  */
 
-
-
 /*
  *   Bibliotecas
  */
@@ -108,11 +106,12 @@ int main(int argc, char **argv){
         
             char buffer[BUFFER_SIZE];
 
-            while(running){
+            while(running == true){
+
                 ssize_t rcvd = recv(client_fd,
                                     buffer,
                                     BUFFER_SIZE,
-                                0);
+                                    0);
 
                 if(rcvd <= 0){
                     if(rcvd == 0){
@@ -120,7 +119,7 @@ int main(int argc, char **argv){
 
                         printf("Conexão perdida com o servidor.\n");
 
-                        break;
+                        gracefulShutdown();
                     }else{
                         strcpy(error, "Falha no recebimento de mensagem do servidor: ");
                         strcat(error, strerror(errno));
@@ -138,7 +137,8 @@ int main(int argc, char **argv){
             char buffer[BUFFER_SIZE];
             struct timeval timeout;
 
-            while(running){
+            while(running == true){
+
                 fd_set fds;
 
                 FD_ZERO(&fds);
@@ -197,9 +197,9 @@ void handleSIGINT(int signal){
 void gracefulShutdown(){
 // rotina de encerramento gracioso
 
-    close(client_fd);
+    running = false;
 
-    running = false; // encerra os laços de repetição
+    close(client_fd);
 
     exit(EXIT_SUCCESS);
 }
@@ -211,9 +211,9 @@ void crashLanding(char *e){
 
     fprintf(stderr, "Fim abrupto da aplicação.\n");
 
-    close(client_fd);
-
     running = false;
+
+    close(client_fd);
 
     exit(EXIT_FAILURE);
 }
