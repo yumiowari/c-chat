@@ -6,6 +6,8 @@
  * 
  *  Aplicação Servidora
  * 
+ *  Todos os direitos reservados, 2025 | owariyumi@gmail.com
+ * 
  */
 
 /*

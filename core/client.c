@@ -6,6 +6,8 @@
  * 
  *  Aplicação Cliente
  * 
+ *  Todos os direitos reservados, 2025 | owariyumi@gmail.com
+ * 
  */
 
 /*
@@ -126,6 +128,8 @@ int main(int argc, char **argv){
                                 
                         crashLanding(error);
                     }
+                }else{
+                    // tratamento da mensagem recebida
                 }
             }
         }
@@ -135,23 +139,41 @@ int main(int argc, char **argv){
         // saída
 
             char buffer[BUFFER_SIZE];
+            fd_set fds; // conjunto de file descriptors
+
+            // define o tempo máx. de espera
             struct timeval timeout;
+            timeout.tv_sec = 0;
+            timeout.tv_usec = 250000; // 250ms
 
             while(running == true){
 
-                #pragma omp critical
-                scanf("%s", buffer);
+                FD_ZERO(&fds);              // "limpa" o conjunto de descritores de arquivo
+                FD_SET(STDIN_FILENO, &fds); // e adiciona o descritor de stdin
 
-                ssize_t sent = send(client_fd,
-                                    buffer,
-                                    strlen(buffer),
-                                    0);
-                if(sent < 0){ // em caso de erro, send() retorna -1
-                    strcpy(error, "Falha no envio de mensagem ao servidor: ");
-                    strcat(error, strerror(errno));
-                                    
-                    crashLanding(error);
-                } 
+                // retorna imediatamente se houver entrada ou após timeout (250ms)
+                int ready = select(STDIN_FILENO + 1, &fds, NULL, NULL, &timeout);
+
+                if(ready > 0){
+
+                    #pragma omp critical
+                    {
+                        if(fgets(buffer, BUFFER_SIZE, stdin)){
+                            buffer[strcspn(buffer, "\n")] = '\0'; // remove a quebra de linha, se houver
+
+                            ssize_t sent = send(client_fd,
+                                                buffer,
+                                                strlen(buffer),
+                                                0);
+                            if(sent < 0){ // em caso de erro, send() retorna -1
+                                strcpy(error, "Falha no envio de mensagem ao servidor: ");
+                                strcat(error, strerror(errno));
+                                                    
+                                crashLanding(error);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
