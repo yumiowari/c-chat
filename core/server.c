@@ -224,8 +224,8 @@ int main(int argc, char **argv){
                     while(running == true){
 
                         ssize_t sent = send(client_fd,
-                                            "ok",
-                                            strlen("ok"),
+                                            &client.secret,
+                                            sizeof(client.secret),
                                             0);
                         if(sent < 0){ // em caso de erro, send() retorna -1
                             strcpy(error, "Falha no envio de mensagem ao cliente: ");

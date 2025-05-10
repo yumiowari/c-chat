@@ -143,14 +143,14 @@ int main(int argc, char **argv){
         #pragma omp section
         {
         // entrada
-        
-            char buffer[BUFFER_SIZE];
+
+            long secret;
 
             while(running == true){
 
                 ssize_t rcvd = recv(client_fd,
-                                    buffer,
-                                    BUFFER_SIZE,
+                                    &secret,
+                                    sizeof(secret),
                                     0);
                 if(rcvd <= 0){
                     if(rcvd == 0){
@@ -166,7 +166,12 @@ int main(int argc, char **argv){
                         crashLanding(error);
                     }
                 }else{
-                    // tratamento da mensagem recebida
+                    if(secret != client.secret){
+                        strcpy(error, "A verificação do segredo falhou: "
+                                      "A conexão pode ser insegura.\n");
+
+                        crashLanding(error);
+                    }
                 }
             }
         }
