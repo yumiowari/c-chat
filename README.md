@@ -15,7 +15,9 @@ O projeto de desenvolvimento __C-Chat__ constitui da elaboração de um sistema 
 
 ## Compilação
 
-`gcc client.c -o client -fopenmp && gcc server.c -o server -fopenmp`
+`gcc -c client_utils.c -o client_utils.o`
+
+`gcc client.c client_utils.o -o client -fopenmp && gcc server.c client_utils.o -o server -fopenmp`
 
 ## Execução
 

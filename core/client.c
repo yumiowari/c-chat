@@ -27,6 +27,8 @@
 #include <sys/select.h> // select()
 #include <errno.h>      // nº do último erro
 
+#include "client_utils.h"
+
 /*
  *  Definições
  */
@@ -34,14 +36,6 @@
 #define SERVER_IP "127.0.0.1"
 #define BUFFER_SIZE 1024
 #define TIMEOUT_SEC 1
-
-/*
- *  Estruturas
- */
-struct client_info{
-    char username[16]; // 15 char + '\0'
-    long secret;
-};
 
 /*
  *  Variáveis Globais
@@ -63,9 +57,6 @@ void crashLanding(char *e);
 
 bool checkArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
-
-long hashing(char username[16]);
-// função p/ converter o nome de usuário para um código hash
 
 int main(int argc, char **argv){
     struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
@@ -301,23 +292,4 @@ bool checkArgs(int argc, char **argv){
     }
 
     return flag;
-}
-
-long hashing(char username[16]){
-// função p/ converter o nome de usuário para um código hash
-
-    long secret = 0;
-    int p = 1;
-
-    for(int i = 0; i < strlen(username); i++){
-        if(username[i] >= 'A' && username[i] <= 'Z'){
-            secret += (username[i] - 'A') * p;
-        }else if(username[i] >= 'a' && username[i] <= 'z'){
-            secret += (username[i] - 'a') * p;
-        }
-
-        p *= 10;
-    }
-
-    return secret;
 }

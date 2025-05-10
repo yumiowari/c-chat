@@ -27,20 +27,14 @@
 #include <stdatomic.h>  // atomic_bool typedef
 #include <errno.h>      // nº do último erro
 
+#include "client_utils.h"
+
 /*
  *  Definições
  */
 #define PORT 8080
 #define BUFFER_SIZE 1024
 #define MAX_CHILDREN 1024
-
-/*
- *  Estruturas
- */
-struct client_info{
-    char username[16]; // 15 char + '\0'
-    long secret;
-};
 
 /*
  *  Variáveis Globais
@@ -304,8 +298,6 @@ void handleSIGTERM(int signal){
 
 void gracefulShutdown(int context){
 // rotina de encerramento gracioso
-
-    //printf("Iniciando rotina de encerramento gracioso...\n");
 
     switch(context){
         case 0: // processo pai
