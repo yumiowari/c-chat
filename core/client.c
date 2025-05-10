@@ -2,11 +2,11 @@
  *
  *  Sistema de Chatting Cliente-Servidor
  *
- *  Por Rafael Renó Corrêa, 2025
+ *  Copyright © 2025 Rafael Renó Corrêa | owariyumi@gmail.com
  * 
- *  Aplicação Cliente
+ *  Todos os direitos reservados.
  * 
- *  Todos os direitos reservados, 2025 | owariyumi@gmail.com
+ *  APLICAÇÃO CLIENTE
  * 
  */
 
