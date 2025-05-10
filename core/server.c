@@ -35,6 +35,14 @@
 #define MAX_CHILDREN 1024
 
 /*
+ *  Estruturas
+ */
+struct client_info{
+    char username[16]; // 15 char + '\0'
+    long secret;
+};
+
+/*
  *  Variáveis Globais
  */
 int server_fd,
@@ -129,6 +137,29 @@ int main(int argc, char **argv){
             continue;
         }
 
+        // recebe os dados do cliente
+        struct client_info client;
+        ssize_t rcvd = recv(client_fd,
+                            &client,
+                            sizeof(client),
+                            0);
+        if(rcvd <= 0){
+            if(rcvd == 0){
+            // conexão perdida
+
+                printf("Conexão perdida com o cliente.\n");
+                            
+                gracefulShutdown(1);
+            }else{
+                strcpy(error, "Falha ao receber os dados do cliente: ");
+                strcat(error, strerror(errno));
+                                                        
+                crashLanding(1, error);
+            }
+        }
+
+        printf("Conexão estabelecida com %s!\n", client.username);
+
         pid_t pid = fork();
 
         if(pid < 0){
@@ -162,7 +193,6 @@ int main(int argc, char **argv){
                                             buffer,
                                             BUFFER_SIZE,
                                             0);
-
                         if(rcvd <= 0){
                             if(rcvd == 0){
                             // conexão perdida
@@ -197,7 +227,6 @@ int main(int argc, char **argv){
                                             "ok",
                                             strlen("ok"),
                                             0);
-
                         if(sent < 0){ // em caso de erro, send() retorna -1
                             strcpy(error, "Falha no envio de mensagem ao cliente: ");
                             strcat(error, strerror(errno));

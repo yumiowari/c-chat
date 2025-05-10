@@ -36,6 +36,14 @@
 #define TIMEOUT_SEC 1
 
 /*
+ *  Estruturas
+ */
+struct client_info{
+    char username[16]; // 15 char + '\0'
+    long secret;
+};
+
+/*
  *  Variáveis Globais
  */
 int client_fd;
@@ -53,12 +61,30 @@ void gracefulShutdown();
 void crashLanding(char *e);
 // rotina de encerramento em caso de falha
 
+bool checkArgs(int argc, char **argv);
+// função p/ verificar os parâmetros de entrada
+
+long hashing(char username[16]);
+// função p/ converter o nome de usuário para um código hash
+
 int main(int argc, char **argv){
     struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
     struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
     char error[1024];
+
+    // verifica os parâmetros de inicialização
+    if(checkArgs == false){
+        strcat(error, "Parâmetros de inicialização inválidos.\n");
+
+        crashLanding(error);
+    }
+
+    // define as informações de cliente
+    struct client_info client;
+    strcpy(client.username, argv[1]);
+    client.secret = hashing(client.username);
 
     // configura o tratamento de sinais...
     signal(SIGINT, handleSIGINT);
@@ -99,6 +125,18 @@ int main(int argc, char **argv){
 
     printf("Conexão estabelecida com o servidor.\n");
 
+    // informa os dados de cliente para o servidor
+    ssize_t sent = send(client_fd,
+                        &client,
+                        sizeof(client),
+                        0);
+    if(sent < 0){ // em caso de erro, send() retorna -1
+        strcpy(error, "Falha ao informar os dados de cliente ao servidor: ");
+        strcat(error, strerror(errno));
+                                                    
+        crashLanding(error);
+    }
+
     // lógica de comunicação
     #pragma omp parallel sections
     {
@@ -114,7 +152,6 @@ int main(int argc, char **argv){
                                     buffer,
                                     BUFFER_SIZE,
                                     0);
-
                 if(rcvd <= 0){
                     if(rcvd == 0){
                     // conexão perdida
@@ -219,4 +256,63 @@ void crashLanding(char *e){
     close(client_fd);
 
     exit(EXIT_FAILURE);
+}
+
+bool checkArgs(int argc, char **argv){
+// função p/ verificar os parâmetros de entrada
+
+    bool flag = true;
+
+    if(argc == 2){
+        if(strlen(argv[1]) > 15){
+            fprintf(stderr, "O nome de usuário não pode exceder 15 caracteres.\n");
+
+            flag = false;
+        }
+
+        if(flag == true){
+            for(int i = 0; i < strlen(argv[1]); i++){
+                if(argv[1][i] >= 'A' && argv[1][i] <= 'Z'){
+
+                }else if(argv[1][i] >= 'a' && argv[1][i] <= 'z'){
+
+                }else if(argv[1][i] == '_'){
+
+                }else{
+                    fprintf(stderr, "Caracteres inválidos para nome de usuário.\n"
+                                    "Uso: A-Z a-z _\n");
+
+                    flag = false;
+
+                    break;
+                }
+            }
+        }
+    }else{
+        fprintf(stderr, "Parâmetros inválidos.\n"
+                        "Uso: ./client <username>\n");
+
+        flag = false;
+    }
+
+    return flag;
+}
+
+long hashing(char username[16]){
+// função p/ converter o nome de usuário para um código hash
+
+    long secret = 0;
+    int p = 1;
+
+    for(int i = 0; i < strlen(username); i++){
+        if(username[i] >= 'A' && username[i] <= 'Z'){
+            secret += (username[i] - 'A') * p;
+        }else if(username[i] >= 'a' && username[i] <= 'z'){
+            secret += (username[i] - 'a') * p;
+        }
+
+        p *= 10;
+    }
+
+    return secret;
 }
