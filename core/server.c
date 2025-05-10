@@ -305,7 +305,7 @@ void crashLanding(int context, char *e){
     switch(context){
         case 0: // processo pai
 
-            fprintf(stderr, strcat(e, "\n"));
+            fprintf(stderr, "%s\n", e);
 
             fprintf(stderr, "Fim abrupto da aplicação.\n");
 
@@ -318,6 +318,8 @@ void crashLanding(int context, char *e){
             break;
 
         case 1: // processo filho
+
+            fprintf(stderr, "%s\n", e);
 
             fprintf(stderr, "Fim abrupto do processo %d.\n", getpid());
 

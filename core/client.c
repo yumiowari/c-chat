@@ -188,7 +188,7 @@ void gracefulShutdown(){
 void crashLanding(char *e){
 // rotina de encerramento em caso de falha
 
-    fprintf(stderr, strcat(e, "\n"));
+    fprintf(stderr, "%s\n", e);
 
     fprintf(stderr, "Fim abrupto da aplicação.\n");
 
