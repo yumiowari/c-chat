@@ -1,15 +1,15 @@
 /*
  *
- * Sistema de Chatting Cliente-Servidor
+ *  Sistema de Chatting Cliente-Servidor
  *
- * Por Rafael Renó Corrêa, 2025
+ *  Por Rafael Renó Corrêa, 2025
  * 
- * Aplicação Servidora
+ *  Aplicação Servidora
  * 
  */
 
 /*
- *   Bibliotecas
+ *  Bibliotecas
  */
 #include <stdlib.h>     // multiprocessing, exit()
 #include <stdio.h>      // I/O
@@ -26,14 +26,14 @@
 #include <errno.h>      // nº do último erro
 
 /*
- *   Definições
+ *  Definições
  */
 #define PORT 8080
 #define BUFFER_SIZE 1024
 #define MAX_CHILDREN 1024
 
 /*
- *   Variáveis Globais
+ *  Variáveis Globais
  */
 int server_fd,
     client_fd;
@@ -42,7 +42,7 @@ pid_t children[MAX_CHILDREN]; // array de PIDs dos processos filhos
 int children_qty = 0;         // contador de filhos (solução temporária)
 
 /*
- *   Assinaturas
+ *  Assinaturas
  */
 void handleSIGINT(int signal);
 // função p/ tratar o sinal de interrupção (CTRL + C)
@@ -225,7 +225,7 @@ int main(int argc, char **argv){
 }
 
 /*
- *   Funções
+ *  Funções
  */
 void handleSIGINT(int signal){
 // função p/ tratar o sinal de interrupção (CTRL + C)
@@ -263,8 +263,8 @@ void handleSIGCHLD(int signal){
 void handleSIGTERM(int signal){
 // função p/ tratar o sinal de encerramento de processo
 
-    printf("\nSinal de término recebido.\n"
-           "\nEncerrando processo filho...\n"); // no contexto do processo filho
+    printf("\n(%d) Sinal de término recebido.\n"
+           "Encerrando processo filho...\n", getpid()); // no contexto do processo filho
 
     gracefulShutdown(0);
 

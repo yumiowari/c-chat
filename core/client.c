@@ -1,15 +1,15 @@
 /*
  *
- * Sistema de Chatting Cliente-Servidor
+ *  Sistema de Chatting Cliente-Servidor
  *
- * Por Rafael Renó Corrêa, 2025
+ *  Por Rafael Renó Corrêa, 2025
  * 
- * Aplicação Cliente
+ *  Aplicação Cliente
  * 
  */
 
 /*
- *   Bibliotecas
+ *  Bibliotecas
  */
 #include <stdlib.h>     // exit()
 #include <stdio.h>      // I/O
@@ -26,7 +26,7 @@
 #include <errno.h>      // nº do último erro
 
 /*
- *   Definições
+ *  Definições
  */
 #define PORT 8080
 #define SERVER_IP "127.0.0.1"
@@ -34,13 +34,13 @@
 #define TIMEOUT_SEC 1
 
 /*
- *   Variáveis Globais
+ *  Variáveis Globais
  */
 int client_fd;
 volatile atomic_bool running = true;
 
 /*
- *   Assinaturas
+ *  Assinaturas
  */
 void handleSIGINT(int signal);
 // função p/ tratar o sinal de interrupção (CTRL + C)
@@ -139,38 +139,19 @@ int main(int argc, char **argv){
 
             while(running == true){
 
-                fd_set fds;
+                #pragma omp critical
+                scanf("%s", buffer);
 
-                FD_ZERO(&fds);
-                FD_SET(STDIN_FILENO, &fds); // atribui stdin ao conjunto de file descriptors
-                
-                timeout.tv_sec = TIMEOUT_SEC;
-                timeout.tv_usec = 0;
-
-                int ready = select(STDIN_FILENO + 1, &fds, NULL, NULL, &timeout);
-                
-                if(ready > 0){
-                    #pragma omp critical
-                    scanf("%s", buffer);
-
-                    ssize_t sent = send(client_fd,
-                                        buffer,
-                                        strlen(buffer),
-                                        0);
-                    if(sent < 0){ // em caso de erro, send() retorna -1
-                        strcpy(error, "Falha no envio de mensagem ao servidor: ");
-                        strcat(error, strerror(errno));
-                                
-                        crashLanding(error);
-                    }
-                }else if(ready == 0){
-                    continue;
-                }else{
-                    strcpy(error, "Falha na verificação da entrada padrão: ");
+                ssize_t sent = send(client_fd,
+                                    buffer,
+                                    strlen(buffer),
+                                    0);
+                if(sent < 0){ // em caso de erro, send() retorna -1
+                    strcpy(error, "Falha no envio de mensagem ao servidor: ");
                     strcat(error, strerror(errno));
-                                
+                                    
                     crashLanding(error);
-                }
+                } 
             }
         }
     }
@@ -181,7 +162,7 @@ int main(int argc, char **argv){
 }
 
 /*
- *   Funções
+ *  Funções
  */
 void handleSIGINT(int signal){
 // função p/ tratar o sinal de interrupção (CTRL + C)
