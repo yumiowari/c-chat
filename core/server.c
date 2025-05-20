@@ -42,8 +42,8 @@
 int server_fd,
     client_fd;
 volatile atomic_bool running = true;
-pid_t children[MAX_CHILDREN]; // array de PIDs dos processos filhos
-int children_qty = 0;         // contador de filhos (solução temporária)
+struct client_info children[MAX_CHILDREN]; // array de processos filhos (clientes)
+int children_qty = 0;                      // contador de filhos (solução temporária)
 
 /*
  *  Assinaturas
@@ -72,9 +72,6 @@ int main(int argc, char **argv){
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
     char error[1024];
-
-    // configura o array de PIDs de processos filhos
-    memset(children, -1, MAX_CHILDREN);
 
     // configura o tratamento de sinais...
     signal(SIGINT,  handleSIGINT);
@@ -239,8 +236,9 @@ int main(int argc, char **argv){
 
             close(client_fd); // prepara para estabelecer novas conexões
 
-            // insere o PID do processo filho no array
-            children[children_qty] = pid;
+            // insere o cliente no array de processos filhos
+            client.pid = pid;
+            children[children_qty] = client;
 
             children_qty++;
         }
@@ -273,7 +271,7 @@ void handleSIGCHLD(int signal){
         printf("\nProcesso filho com PID %d terminou.\n", pid);
 
         for(int i = 0; i < children_qty; i++){ // O(n * m)
-            if(children[i] == pid){
+            if(children[i].pid == pid){
                 for(int j = i; j < children_qty - 1; j++)
                     children[j] = children[j + 1];
 
@@ -360,7 +358,7 @@ void killOffspring(){
 // função p/ matar os processos filhos
 
     for(int i = 0; i < children_qty; i++){
-        if(kill(children[i], SIGTERM) == -1){
+        if(kill(children[i].pid, SIGTERM) == -1){
             fprintf(stderr, "Falha ao enviar SIGTERM para o processo filho %d: %s\n", children[i], strerror(errno));
         }else{
             printf("Encerrando processo filho %d...\n", children[i]);
