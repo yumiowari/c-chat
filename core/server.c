@@ -289,7 +289,7 @@ void handleSIGTERM(int signal){
     printf("\n(%d) Sinal de término recebido.\n"
            "Encerrando processo filho...\n", getpid()); // no contexto do processo filho
 
-    gracefulShutdown(0);
+    gracefulShutdown(1);
 
     exit(EXIT_SUCCESS);
 }
