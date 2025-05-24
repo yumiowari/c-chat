@@ -37,6 +37,15 @@
 #define MAX_CHILDREN 1024
 
 /*
+ *  Macros
+ */
+#define FORMAT_ERROR(error, prefix)     \
+    do{                                 \
+        strcpy(error, prefix);          \
+        strcat(error, strerror(errno)); \
+    }while(0)
+
+/*
  *  Variáveis Globais
  */
 int server_fd,
@@ -82,8 +91,7 @@ int main(int argc, char **argv){
                        SOCK_STREAM, // baseado em conexão
                        0);
     if(server_fd == -1){
-        strcpy(error, "Falha na criação do soquete de servidor: ");
-        strcat(error, strerror(errno));
+        FORMAT_ERROR(error, "Falha na criação do soquete de servidor: ");
                                 
         crashLanding(0, error);
     }
@@ -97,8 +105,7 @@ int main(int argc, char **argv){
     if(bind(server_fd,       // o file desciptor do soquete do servidor
             server_addr_ptr, // ao endereço do servidor
             server_addr_len) < 0){
-        strcpy(error, "Falha de definição do endereço de servidor: ");
-        strcat(error, strerror(errno));
+        FORMAT_ERROR(error, "Falha de definição do endereço de servidor: ");
                                 
         crashLanding(0, error);
     }
@@ -107,8 +114,7 @@ int main(int argc, char **argv){
     if(listen(server_fd, // no soquete do servidor com
               5          // fila limite de 5 requisições
              ) < 0){
-        strcpy(error, "Falha na tentativa de conexão com o cliente: ");
-        strcat(error, strerror(errno));
+        FORMAT_ERROR(error, "Falha na tentativa de conexão com o cliente: ");
                                         
         crashLanding(0, error);
     }
@@ -142,8 +148,7 @@ int main(int argc, char **argv){
                             
                 gracefulShutdown(1);
             }else{
-                strcpy(error, "Falha ao receber os dados do cliente: ");
-                strcat(error, strerror(errno));
+                FORMAT_ERROR(error, "Falha na recepção das informações do cliente: ");
                                                         
                 crashLanding(1, error);
             }
@@ -156,8 +161,7 @@ int main(int argc, char **argv){
         if(pid < 0){
         // fork() falhou
         
-            strcpy(error, "Falha na criação do processo para comunicação com o cliente: ");
-            strcat(error, strerror(errno));
+            FORMAT_ERROR(error, "Falha na criação do processo para comunicação com o cliente: ");
                                     
             crashLanding(0, error);
         }else if(pid == 0){
@@ -192,8 +196,7 @@ int main(int argc, char **argv){
                             
                                 gracefulShutdown(1);
                             }else{
-                                strcpy(error, "Falha no recebimento de mensagem do cliente: ");
-                                strcat(error, strerror(errno));
+                                FORMAT_ERROR(error, "Falha no recebimento da mensagem do cliente: ");
                                                         
                                 crashLanding(1, error);
                             }
@@ -219,8 +222,7 @@ int main(int argc, char **argv){
                                             sizeof(client.secret),
                                             0);
                         if(sent < 0){ // em caso de erro, send() retorna -1
-                            strcpy(error, "Falha no envio de mensagem ao cliente: ");
-                            strcat(error, strerror(errno));
+                            FORMAT_ERROR(error, "Falha no envio da mensagem ao cliente: ");
                                                     
                             crashLanding(1, error);
                         }else{

@@ -38,6 +38,15 @@
 #define TIMEOUT_SEC 1
 
 /*
+ *  Macros
+ */
+#define FORMAT_ERROR(error, prefix)     \
+    do{                                 \
+        strcpy(error, prefix);          \
+        strcat(error, strerror(errno)); \
+    }while(0)
+
+/*
  *  Variáveis Globais
  */
 int client_fd;
@@ -66,8 +75,8 @@ int main(int argc, char **argv){
     char error[1024];
 
     // verifica os parâmetros de inicialização
-    if(checkArgs == false){
-        strcat(error, "Parâmetros de inicialização inválidos.\n");
+    if(checkArgs(argc, argv) == false){
+        FORMAT_ERROR(error, "Parâmetros de inicialização inválidos.\n");
 
         crashLanding(error);
     }
@@ -85,8 +94,7 @@ int main(int argc, char **argv){
                        SOCK_STREAM, // baseado em conexão
                        0);
     if(client_fd == -1){
-        strcat(error, "Falha na criação do soquete de cliente: ");
-        strcat(error, strerror(errno));
+        FORMAT_ERROR(error, "Falha na criação do soquete de cliente: ");
 
         crashLanding(error);
     }
@@ -97,8 +105,7 @@ int main(int argc, char **argv){
                  SERVER_IP,             // no endereço IP localhost
                  &server_addr.sin_addr
                 ) <= 0){
-        strcpy(error, "Falha na definição do endereço do servidor: ");
-        strcat(error, strerror(errno));
+        FORMAT_ERROR(error, "Falha na definição do endereço do servidor: ");
 
         crashLanding(error);
     }
@@ -108,8 +115,7 @@ int main(int argc, char **argv){
     if(connect(client_fd,
                server_addr_ptr,
                server_addr_len) < 0){
-        strcpy(error, "Falha na tentativa de conexão com o servidor: ");
-        strcat(error, strerror(errno));
+        FORMAT_ERROR(error, "Falha na tentativa de conexão com o servidor: ");
                 
         crashLanding(error);
     }
@@ -122,8 +128,7 @@ int main(int argc, char **argv){
                         sizeof(client),
                         0);
     if(sent < 0){ // em caso de erro, send() retorna -1
-        strcpy(error, "Falha ao informar os dados de cliente ao servidor: ");
-        strcat(error, strerror(errno));
+        FORMAT_ERROR(error, "Falha ao informar os dados de cliente ao servidor: ");
                                                     
         crashLanding(error);
     }
@@ -151,15 +156,14 @@ int main(int argc, char **argv){
 
                         gracefulShutdown();
                     }else{
-                        strcpy(error, "Falha no recebimento de mensagem do servidor: ");
-                        strcat(error, strerror(errno));
+                        FORMAT_ERROR(error, "Falha no recebimento da mensagem do servidor: ");
                                 
                         crashLanding(error);
                     }
                 }else{
                     if(secret != client.secret){
-                        strcpy(error, "A verificação do segredo falhou: "
-                                      "A conexão pode ser insegura.\n");
+                        FORMAT_ERROR(error, "A verificação do segredo falhou: "
+                                            "A conexão pode ser insegura.\n");
 
                         crashLanding(error);
                     }
@@ -199,8 +203,7 @@ int main(int argc, char **argv){
                                                 strlen(buffer),
                                                 0);
                             if(sent < 0){ // em caso de erro, send() retorna -1
-                                strcpy(error, "Falha no envio de mensagem ao servidor: ");
-                                strcat(error, strerror(errno));
+                                FORMAT_ERROR(error, "Falha no envio da mensagem ao servidor: ");
                                                     
                                 crashLanding(error);
                             }
