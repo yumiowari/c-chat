@@ -41,11 +41,7 @@
 /*
  *  Macros
  */
-#define FORMAT_ERROR(error, prefix)     \
-    do{                                 \
-        strcpy(error, prefix);          \
-        strcat(error, strerror(errno)); \
-    }while(0)
+#define FORMAT_ERROR(error, prefix) strcpy(error, prefix); strcat(error, strerror(errno));
 
 /*
  *  Variáveis Globais
