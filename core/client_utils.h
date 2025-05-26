@@ -11,6 +11,9 @@ struct client{
     pid_t pid;
     char username[16]; // 15 char + '\0'
     long secret;
+    key_t shm_key;
+    int shm_id;
+    char *shm_ptr;
 };
 
 /*

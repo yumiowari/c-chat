@@ -26,6 +26,8 @@
 #include <wait.h>       // waitpid()
 #include <stdatomic.h>  // atomic_bool typedef
 #include <errno.h>      // nº do último erro
+#include <sys/ipc.h>    // ftok()
+#include <sys/shm.h>    // shmget(), shmat(), shmdt(), shmctl()
 
 #include "server_utils.h"
 #include "client_utils.h"
@@ -35,7 +37,9 @@
  *  Definições
  */
 #define BUFFER_SIZE 1024
+#define SHM_SIZE BUFFER_SIZE
 #define MAX_CHILDREN 1024
+#define PROJECT_ID 65
 
 /*
  *  Macros
@@ -50,6 +54,8 @@ int server_fd,
 bool running = true;
 struct client children[MAX_CHILDREN]; // array de processos filhos (clientes)
 int children_qty = 0;                 // contador de filhos (solução temporária)
+int secrets[MAX_CHILDREN]; // array de secrets
+int secrets_qty = 0;       // contador de secrets
 
 /*
  *  Assinaturas
@@ -80,6 +86,8 @@ void killOffspring();
 
 int main(int argc, char **argv){
     char error[BUFFER_SIZE];
+    char path[32];
+    bool flag;
 
     // configura o tratamento de sinais...
     signal(SIGINT,  handleSIGINT);
@@ -95,6 +103,23 @@ int main(int argc, char **argv){
         struct client client = tryAccept(server);
 
         printf("Conexão estabelecida com %s!\n", client.username);
+
+        // verifica se o grupo do cliente existe
+        flag = false;
+        for(int i = 0; i < secrets_qty; i++){
+            if(secrets[i] == client.secret){
+                flag = true;
+
+                break;
+            }
+        }
+        if(flag == false){
+        // se não existir, insere no array de grupos
+
+            secrets[secrets_qty] = client.secret;
+
+            secrets_qty++;
+        }
 
         pid_t pid = fork();
 
@@ -112,9 +137,36 @@ int main(int argc, char **argv){
             // configura tratamento de sinais
             signal(SIGINT,  SIG_IGN);
             signal(SIGTERM, handleSIGTERM);
+
+            // cria o arquivo no disco rígido
+            sprintf(path, ".tmp/%ld", client.secret);
+            FILE *f = fopen(path, "a");
+            if(f)fclose(f);
+
+            client.shm_key = ftok(path, PROJECT_ID);
+            
+            if(flag == false){
+            // é o processo que cria o segmento de memória compartilhado
+                
+                client.shm_id = shmget(client.shm_key, SHM_SIZE, IPC_CREAT | 0666);
+                if(client.shm_id < 0){
+                    FORMAT_ERROR(error, "Falha na criação do espaço de memória compartilhado: ");
+
+                    crashLanding(0, error);
+                }
+            }else{
+            // é o processo que acessa o segmento de memória compartilhado
+
+                client.shm_id = shmget(client.shm_key, SHM_SIZE, 0666); // sem IPC_CREAT
+                if(client.shm_id < 0){
+                    FORMAT_ERROR(error, "Falha no acesso ao espaço de memória compartilhado: ");
+
+                    crashLanding(0, error);
+                }
+            }
             
             // lógica de comunicação
-            #pragma omp parallel sections shared(running)
+            #pragma omp parallel sections shared(running) firstprivate(client)
             {
                 #pragma omp section
                 {
@@ -125,6 +177,7 @@ int main(int argc, char **argv){
                     while(running == true){
                     // recebe mensagens do cliente e encaminha para os outros membros do grupo
 
+                        // recebe a mensagem do cliente
                         ssize_t rcvd = recv(client_fd,
                                             buffer,
                                             BUFFER_SIZE,
@@ -148,7 +201,19 @@ int main(int argc, char **argv){
                         #pragma omp critical
                         printf("(%d) %s\n", getpid(), buffer);
 
-                        memset(buffer, 0, BUFFER_SIZE);
+                        // encaminha a mensagem para os outros membros do grupo
+                        client.shm_ptr = (char*) shmat(client.shm_id, NULL, 0);
+                        if(client.shm_ptr == (char*) -1){
+                            FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
+
+                            crashLanding(1, error);
+                        }
+
+                        strcat(client.shm_ptr, buffer);
+
+                        shmdt(client.shm_ptr); // libera o segmento de memória compartilhado
+
+                        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
                     }
                 }
 
@@ -156,12 +221,27 @@ int main(int argc, char **argv){
                 {
                 // saída
 
+                    char buffer[BUFFER_SIZE];
+
                     while(running == true){
                     // lê mensagens dos outros membros do grupo e encaminha para o cliente
 
+                        // recebe a mensagem de outro membro do grupo
+                        client.shm_ptr = (char*) shmat(client.shm_id, NULL, 0);
+                        if(client.shm_ptr == (char*) -1){
+                            FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
+
+                            crashLanding(1, error);
+                        }
+
+                        strcat(buffer, client.shm_ptr);
+
+                        shmdt(client.shm_ptr);
+
+                        // encaminha a mensagem para o cliente
                         ssize_t sent = send(client_fd,
-                                            &client.secret,
-                                            sizeof(client.secret),
+                                            buffer,
+                                            strlen(buffer),
                                             0);
                         if(sent < 0){ // em caso de erro, send() retorna -1
                             FORMAT_ERROR(error, "Falha no envio da mensagem ao cliente: ");
@@ -170,6 +250,8 @@ int main(int argc, char **argv){
                         }else{
                             sleep(1); // espera 1 segundo antes da próxima mensagem
                         }
+
+                        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
                     }
                 }
             }
@@ -308,16 +390,37 @@ void handleSIGCHLD(int signal){
 
     int status;
     pid_t pid;
+    bool flag;
+    struct client client;
 
     while((pid = waitpid(-1, &status, WNOHANG)) > 0){
         printf("\nProcesso filho com PID %d terminou.\n", pid);
 
         for(int i = 0; i < children_qty; i++){ // O(n * m)
             if(children[i].pid == pid){
+                client = children[i];
+
+                // remove o processo filho do array
                 for(int j = i; j < children_qty - 1; j++)
                     children[j] = children[j + 1];
 
                 children_qty--;
+
+                flag = false;
+                for(int j = 0; j < children_qty; j++){
+                    if(children[j].secret == client.secret){
+                        flag = true;
+                    }
+                }
+                if(flag == false){
+                // se não houver outros membros no grupo
+
+                    // remove o segredo do array
+                    for(int j = i; j < secrets_qty - 1; j++)
+                        secrets[j] = secrets[j + 1];
+
+                    secrets_qty--;
+                }
 
                 break;
             }

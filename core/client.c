@@ -81,14 +81,14 @@ int main(int argc, char **argv){
         {
         // entrada
 
-            long secret;
+            char buffer[BUFFER_SIZE];
 
             while(running == true){
             // recebe mensagens do servidor
 
                 ssize_t rcvd = recv(client_fd,
-                                    &secret,
-                                    sizeof(secret),
+                                    buffer,
+                                    BUFFER_SIZE,
                                     0);
                 if(rcvd <= 0){
                     if(rcvd == 0){
@@ -103,12 +103,14 @@ int main(int argc, char **argv){
                         crashLanding(error);
                     }
                 }else{
-                    if(secret != client.secret){
+                    /*if(secret != client.secret){
                         FORMAT_ERROR(error, "A verificação do segredo falhou: "
                                             "A conexão pode ser insegura.\n");
 
                         crashLanding(error);
-                    }
+                    }*/
+
+                    printf("%s\n", buffer);
                 }
             }
         }
