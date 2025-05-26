@@ -15,7 +15,7 @@
  */
 #include <stdlib.h>     // exit()
 #include <stdio.h>      // I/O
-#include <stdbool.h>    // boolean type
+#include <stdbool.h>    // bool type
 #include <sys/types.h>  // pid_t
 #include <arpa/inet.h>  // inet_pton(), htons(), etc.
 #include <sys/socket.h> // socket(), connect(), bind(), listen(), accept()
@@ -26,7 +26,7 @@
 #include <stdatomic.h>  // atomic_bool typedef
 #include <sys/select.h> // select()
 #include <errno.h>      // nº do último erro
-#include <unistd.h>
+#include <unistd.h>     // close()
 
 #include "client_utils.h"
 #include "comm_utils.h"

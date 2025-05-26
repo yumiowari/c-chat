@@ -15,8 +15,8 @@
  */
 #include <stdlib.h>     // multiprocessing, exit()
 #include <stdio.h>      // I/O
-#include <stdbool.h>    // boolean type
-#include <unistd.h>     // typedefs
+#include <stdbool.h>    // bool type
+#include <unistd.h>     // fork()
 #include <arpa/inet.h>  // inet_pton(), htons(), etc.
 #include <sys/socket.h> // socket(), connect(), bind(), listen(), accept()
 #include <netinet/in.h> // struct sockaddr_in
