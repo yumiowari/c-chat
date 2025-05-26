@@ -53,7 +53,7 @@ int server_fd,
     client_fd;
 bool running = true;
 struct client children[MAX_CHILDREN]; // array de processos filhos (clientes)
-int children_qty = 0;                      // contador de filhos (solução temporária)
+int children_qty = 0;                 // contador de filhos (solução temporária)
 
 /*
  *  Assinaturas
@@ -393,7 +393,7 @@ void killOffspring(){
 
             crashLanding(0, error);
         }else{
-            printf("Encerrando processo filho %d...\n", children[i]);
+            printf("Encerrando processo filho %d...\n", children[i].pid);
         }
     }
 }
