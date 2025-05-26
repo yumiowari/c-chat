@@ -1,9 +1,4 @@
-#define COMM_UTILS_H
 #ifndef COMM_UTILS_H
-
-/*
- *  Assinaturas
- */
-
+#define COMM_UTILS_H
 
 #endif // COMM_UTILS_H

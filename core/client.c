@@ -16,7 +16,7 @@
 #include <stdlib.h>     // exit()
 #include <stdio.h>      // I/O
 #include <stdbool.h>    // boolean type
-#include <unistd.h>     // typedefs
+#include <sys/types.h>  // pid_t
 #include <arpa/inet.h>  // inet_pton(), htons(), etc.
 #include <sys/socket.h> // socket(), connect(), bind(), listen(), accept()
 #include <netinet/in.h> // struct sockaddr_in
@@ -26,6 +26,7 @@
 #include <stdatomic.h>  // atomic_bool typedef
 #include <sys/select.h> // select()
 #include <errno.h>      // nº do último erro
+#include <unistd.h>
 
 #include "client_utils.h"
 #include "comm_utils.h"
@@ -33,7 +34,6 @@
 /*
  *  Definições
  */
-#define PORT 8080
 #define SERVER_IP "127.0.0.1"
 #define BUFFER_SIZE 1024
 #define TIMEOUT_SEC 1
@@ -51,11 +51,14 @@
  *  Variáveis Globais
  */
 int client_fd;
-volatile atomic_bool running = true;
+bool running = true;
 
 /*
  *  Assinaturas
  */
+struct client setupComm(int argc, char **argv);
+// módulo p/ estabelecer conexão cliente-servidor
+
 void handleSIGINT(int signal);
 // função p/ tratar o sinal de interrupção (CTRL + C)
 
@@ -66,73 +69,17 @@ void crashLanding(char *e);
 // rotina de encerramento em caso de falha
 
 int main(int argc, char **argv){
-    struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
-    struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
-    = (struct sockaddr*)&server_addr;
-    socklen_t server_addr_len = sizeof(server_addr);
-    char error[1024];
-
-    // verifica os parâmetros de inicialização
-    if(checkArgs(argc, argv) == false){
-        FORMAT_ERROR(error, "Parâmetros de inicialização inválidos.\n");
-
-        crashLanding(error);
-    }
-
-    // define as informações de cliente
-    struct client_info client;
-    strcpy(client.username, argv[1]);
-    client.secret = atoi(argv[2]);
+    char error[BUFFER_SIZE];
 
     // configura o tratamento de sinais...
     signal(SIGINT, handleSIGINT);
 
-    // cria o soquete do cliente...
-    client_fd = socket(AF_INET,     // com protocolo IPv4 e
-                       SOCK_STREAM, // baseado em conexão
-                       0);
-    if(client_fd == -1){
-        FORMAT_ERROR(error, "Falha na criação do soquete de cliente: ");
-
-        crashLanding(error);
-    }
-
-    // define o endereço do servidor...
-    server_addr.sin_family = AF_INET;   // para protocolo IPv4,
-    if(inet_pton(AF_INET,
-                 SERVER_IP,             // no endereço IP localhost
-                 &server_addr.sin_addr
-                ) <= 0){
-        FORMAT_ERROR(error, "Falha na definição do endereço do servidor: ");
-
-        crashLanding(error);
-    }
-    server_addr.sin_port = htons(PORT); // e porta 8080
-
-    // estabelece conexão com o servidor...
-    if(connect(client_fd,
-               server_addr_ptr,
-               server_addr_len) < 0){
-        FORMAT_ERROR(error, "Falha na tentativa de conexão com o servidor: ");
-                
-        crashLanding(error);
-    }
+    struct client client = setupComm(argc, argv);
 
     printf("Conexão estabelecida com o servidor.\n");
 
-    // informa os dados de cliente para o servidor
-    ssize_t sent = send(client_fd,
-                        &client,
-                        sizeof(client),
-                        0);
-    if(sent < 0){ // em caso de erro, send() retorna -1
-        FORMAT_ERROR(error, "Falha ao informar os dados de cliente ao servidor: ");
-                                                    
-        crashLanding(error);
-    }
-
     // lógica de comunicação
-    #pragma omp parallel sections
+    #pragma omp parallel sections shared(running)
     {
         #pragma omp section
         {
@@ -222,6 +169,74 @@ int main(int argc, char **argv){
 /*
  *  Funções
  */
+struct client setupComm(int argc, char **argv){
+// módulo p/ estabelecer conexão cliente-servidor
+
+    struct sockaddr_in server_addr;   // endereço do servidor
+    struct sockaddr *server_addr_ptr  // ponteiro genérico p/ o endereço do servidor
+    = (struct sockaddr*)&server_addr;
+    socklen_t server_addr_len = sizeof(server_addr);
+    char error[BUFFER_SIZE];
+    struct client client;
+    int port;
+
+    // verifica os parâmetros de inicialização
+    if(checkClientArgs(argc, argv) == false){
+        FORMAT_ERROR(error, "Parâmetros de inicialização inválidos.\n");
+
+        crashLanding(error);
+    }
+    port = atoi(argv[3]);
+
+    // define as informações de cliente
+    strcpy(client.username, argv[1]);
+    client.secret = atoi(argv[2]);
+
+    // cria o soquete do cliente...
+    client_fd = socket(AF_INET,     // com protocolo IPv4 e
+                       SOCK_STREAM, // baseado em conexão
+                       0);
+    if(client_fd == -1){
+        FORMAT_ERROR(error, "Falha na criação do soquete de cliente: ");
+
+        crashLanding(error);
+    }
+
+    // define o endereço do servidor...
+    server_addr.sin_family = AF_INET;   // para protocolo IPv4,
+    if(inet_pton(AF_INET,
+                 SERVER_IP,             // no endereço IP localhost
+                 &server_addr.sin_addr
+                ) <= 0){
+        FORMAT_ERROR(error, "Falha na definição do endereço do servidor: ");
+
+        crashLanding(error);
+    }
+    server_addr.sin_port = htons(port);
+
+    // estabelece conexão com o servidor...
+    if(connect(client_fd,
+               server_addr_ptr,
+               server_addr_len) < 0){
+        FORMAT_ERROR(error, "Falha na tentativa de conexão com o servidor: ");
+                
+        crashLanding(error);
+    }
+
+    // informa os dados de cliente para o servidor
+    ssize_t sent = send(client_fd,
+                        &client,
+                        sizeof(client),
+                        0);
+    if(sent < 0){ // em caso de erro, send() retorna -1
+        FORMAT_ERROR(error, "Falha ao informar os dados de cliente ao servidor: ");
+                                                    
+        crashLanding(error);
+    }
+
+    return client;
+}
+
 void handleSIGINT(int signal){
 // função p/ tratar o sinal de interrupção (CTRL + C)
 
@@ -237,7 +252,6 @@ void gracefulShutdown(){
 // rotina de encerramento gracioso
 
     running = false;
-
     close(client_fd);
 
     exit(EXIT_SUCCESS);
@@ -247,11 +261,9 @@ void crashLanding(char *e){
 // rotina de encerramento em caso de falha
 
     fprintf(stderr, "%s\n", e);
-
     fprintf(stderr, "Fim abrupto da aplicação.\n");
 
     running = false;
-
     close(client_fd);
 
     exit(EXIT_FAILURE);

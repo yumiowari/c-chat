@@ -27,13 +27,13 @@
 #include <stdatomic.h>  // atomic_bool typedef
 #include <errno.h>      // nº do último erro
 
+#include "server_utils.h"
 #include "client_utils.h"
 #include "comm_utils.h"
 
 /*
  *  Definições
  */
-#define PORT 8080
 #define BUFFER_SIZE 1024
 #define MAX_CHILDREN 1024
 
@@ -51,13 +51,16 @@
  */
 int server_fd,
     client_fd;
-volatile atomic_bool running = true;
-struct client_info children[MAX_CHILDREN]; // array de processos filhos (clientes)
+bool running = true;
+struct client children[MAX_CHILDREN]; // array de processos filhos (clientes)
 int children_qty = 0;                      // contador de filhos (solução temporária)
 
 /*
  *  Assinaturas
  */
+struct server setupComm(int argc, char **argv);
+// módulo p/ estabelecer conexão cliente-servidor
+
 void handleSIGINT(int signal);
 // função p/ tratar o sinal de interrupção (CTRL + C)
 
@@ -77,58 +80,23 @@ void killOffspring();
 // função p/ matar os processos filhos
 
 int main(int argc, char **argv){
-    struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
-    struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
-    = (struct sockaddr*)&server_addr;
-    socklen_t server_addr_len = sizeof(server_addr);
-    char error[1024];
+    char error[BUFFER_SIZE];
 
     // configura o tratamento de sinais...
     signal(SIGINT,  handleSIGINT);
     signal(SIGCHLD, handleSIGCHLD);
 
-    // cria o soquete de servidor...
-    server_fd = socket(AF_INET,     // com protocolo IPv4 e
-                       SOCK_STREAM, // baseado em conexão
-                       0);
-    if(server_fd == -1){
-        FORMAT_ERROR(error, "Falha na criação do soquete de servidor: ");
-                                
-        crashLanding(0, error);
-    }
+    struct server server = setupComm(argc, argv);
 
-    // define o endereço de servidor...
-    server_addr.sin_family = AF_INET;         // para protocolo IPv4,
-    server_addr.sin_addr.s_addr = INADDR_ANY; // de qualquer origem
-    server_addr.sin_port = htons(PORT);       // e porta 8080
-
-    // vincula...
-    if(bind(server_fd,       // o file desciptor do soquete do servidor
-            server_addr_ptr, // ao endereço do servidor
-            server_addr_len) < 0){
-        FORMAT_ERROR(error, "Falha de definição do endereço de servidor: ");
-                                
-        crashLanding(0, error);
-    }
-
-    // declara intenção de escutar novas conexões...
-    if(listen(server_fd, // no soquete do servidor com
-              5          // fila limite de 5 requisições
-             ) < 0){
-        FORMAT_ERROR(error, "Falha na tentativa de conexão com o cliente: ");
-                                        
-        crashLanding(0, error);
-    }
-
-    printf("Servidor on-line e ouvindo na porta %d!\n", PORT);
+    printf("Servidor on-line e ouvindo na porta %d!\n", server.port);
 
     while(running == true){
     // loop do servidor
 
         // aceita uma nova conexão...
         client_fd = accept(server_fd,
-                           server_addr_ptr,
-                           &server_addr_len);
+                           server.server_addr_ptr,
+                           &server.server_addr_len);
         if(client_fd < 0){
             sleep(1);
 
@@ -136,7 +104,7 @@ int main(int argc, char **argv){
         }
 
         // recebe os dados do cliente
-        struct client_info client;
+        struct client client;
         ssize_t rcvd = recv(client_fd,
                             &client,
                             sizeof(client),
@@ -175,7 +143,7 @@ int main(int argc, char **argv){
             signal(SIGTERM, handleSIGTERM);
             
             // lógica de comunicação
-            #pragma omp parallel sections
+            #pragma omp parallel sections shared(running)
             {
                 #pragma omp section
                 {
@@ -255,6 +223,65 @@ int main(int argc, char **argv){
 /*
  *  Funções
  */
+struct server setupComm(int argc, char **argv){
+// módulo p/ estabelecer conexão cliente-servidor
+
+    struct sockaddr_in server_addr;   // endereço do servidor
+    struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
+    = (struct sockaddr*)&server_addr;
+    socklen_t server_addr_len = sizeof(server_addr);
+    char error[BUFFER_SIZE];
+    struct server server;
+
+    // verifica os parâmetros de inicialização
+    if(checkServerArgs(argc, argv) == false){
+        FORMAT_ERROR(error, "Parâmetros de inicialização inválidos.\n");
+
+        crashLanding(0, error);
+    }
+
+    server.port = atoi(argv[1]);
+
+    // cria o soquete de servidor...
+    server_fd = socket(AF_INET,     // com protocolo IPv4 e
+                       SOCK_STREAM, // baseado em conexão
+                       0);
+    if(server_fd == -1){
+        FORMAT_ERROR(error, "Falha na criação do soquete de servidor: ");
+                                
+        crashLanding(0, error);
+    }
+
+    // define o endereço de servidor...
+    server_addr.sin_family = AF_INET;          // para protocolo IPv4,
+    server_addr.sin_addr.s_addr = INADDR_ANY;  // de qualquer origem
+    server_addr.sin_port = htons(server.port);
+
+    // vincula...
+    if(bind(server_fd,       // o file desciptor do soquete do servidor
+            server_addr_ptr, // ao endereço do servidor
+            server_addr_len) < 0){
+        FORMAT_ERROR(error, "Falha de definição do endereço de servidor: ");
+                                
+        crashLanding(0, error);
+    }
+
+    // declara intenção de escutar novas conexões...
+    if(listen(server_fd, // no soquete do servidor com
+              5          // fila limite de 5 requisições
+             ) < 0){
+        FORMAT_ERROR(error, "Falha na tentativa de conexão com o cliente: ");
+                                        
+        crashLanding(0, error);
+    }
+
+    server.server_addr = server_addr;
+    server.server_addr_ptr = server_addr_ptr;
+    server.server_addr_len = server_addr_len;
+
+    return server;
+}
+
 void handleSIGINT(int signal){
 // função p/ tratar o sinal de interrupção (CTRL + C)
 
@@ -303,20 +330,19 @@ void gracefulShutdown(int context){
 // rotina de encerramento gracioso
 
     switch(context){
-        case 0: // processo pai
+        case 0:
+        // processo pai
 
             running = false; // encerra os laços de repetição
-
             killOffspring();
-
             close(server_fd);
 
             break;
 
-        case 1: // processo filho
+        case 1:
+        // processo filho
 
             running = false;
-
             close(client_fd);
 
             break;
@@ -325,32 +351,29 @@ void gracefulShutdown(int context){
     exit(EXIT_SUCCESS);
 }
     
-void crashLanding(int context, char *e){
+void crashLanding(int context, char *error){
 // rotina de encerramento em caso de falha
 
     switch(context){
-        case 0: // processo pai
+        case 0:
+        // processo pai
 
-            fprintf(stderr, "%s\n", e);
-
+            fprintf(stderr, "%s\n", error);
             fprintf(stderr, "Fim abrupto da aplicação.\n");
 
             running = false;
-
             killOffspring();
-
             close(server_fd);
 
             break;
 
-        case 1: // processo filho
+        case 1:
+        // processo filho
 
-            fprintf(stderr, "%s\n", e);
-
+            fprintf(stderr, "%s\n", error);
             fprintf(stderr, "Fim abrupto do processo %d.\n", getpid());
 
             running = false;
-
             close(client_fd);
 
             break;
@@ -362,9 +385,13 @@ void crashLanding(int context, char *e){
 void killOffspring(){
 // função p/ matar os processos filhos
 
+    char error[BUFFER_SIZE];
+
     for(int i = 0; i < children_qty; i++){
         if(kill(children[i].pid, SIGTERM) == -1){
-            fprintf(stderr, "Falha ao enviar SIGTERM para o processo filho %d: %s\n", children[i], strerror(errno));
+            FORMAT_ERROR(error, "Falha ao enviar SIGTERM para o processo filho: ");
+
+            crashLanding(0, error);
         }else{
             printf("Encerrando processo filho %d...\n", children[i]);
         }
