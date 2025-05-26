@@ -29,9 +29,9 @@
 #include <sys/ipc.h>    // ftok()
 #include <sys/shm.h>    // shmget(), shmat(), shmdt(), shmctl()
 
-#include "server_utils.h"
-#include "client_utils.h"
-#include "comm_utils.h"
+#include "server_utils.h" // struct server
+#include "client_utils.h" // struct client
+#include "comm_utils.h"   // wrap(), unwrap()
 
 /*
  *  Definições
@@ -44,7 +44,7 @@
 /*
  *  Macros
  */
-#define FORMAT_ERROR(error, prefix) strcpy(error, prefix); strcat(error, strerror(errno));
+#define FORMAT_ERROR(error, prefix) strcpy(error, prefix); if(errno != 0)strcat(error, strerror(errno));
 
 /*
  *  Variáveis Globais
@@ -139,7 +139,7 @@ int main(int argc, char **argv){
             signal(SIGTERM, handleSIGTERM);
 
             // cria o arquivo no disco rígido
-            sprintf(path, ".tmp/%ld", client.secret);
+            sprintf(path, "./tmp/%ld", client.secret);
             FILE *f = fopen(path, "a");
             if(f)fclose(f);
 
@@ -173,6 +173,9 @@ int main(int argc, char **argv){
                 // entrada
 
                     char buffer[BUFFER_SIZE];
+                    char username[16];
+                    long secret;
+                    char message[BUFFER_SIZE];
 
                     while(running == true){
                     // recebe mensagens do cliente e encaminha para os outros membros do grupo
@@ -198,8 +201,12 @@ int main(int argc, char **argv){
                             
                         buffer[rcvd] = '\0';
 
+                        unwrap(buffer, username, &secret, message);
+
                         #pragma omp critical
-                        printf("(%d) %s\n", getpid(), buffer);
+                        printf("(%ld:%d) %s: %s\n", secret, getpid(), username, message);
+
+                        wrap(buffer, username, secret, message);
 
                         // encaminha a mensagem para os outros membros do grupo
                         client.shm_ptr = (char*) shmat(client.shm_id, NULL, 0);
@@ -222,6 +229,9 @@ int main(int argc, char **argv){
                 // saída
 
                     char buffer[BUFFER_SIZE];
+                    char username[16];
+                    long secret;
+                    char message[BUFFER_SIZE];
 
                     while(running == true){
                     // lê mensagens dos outros membros do grupo e encaminha para o cliente
@@ -229,7 +239,7 @@ int main(int argc, char **argv){
                         // recebe a mensagem de outro membro do grupo
                         client.shm_ptr = (char*) shmat(client.shm_id, NULL, 0);
                         if(client.shm_ptr == (char*) -1){
-                            FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
+                            FORMAT_ERROR(error, "Falha ao acessar o segmento de memória compartilhado: ");
 
                             crashLanding(1, error);
                         }
