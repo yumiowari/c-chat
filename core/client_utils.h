@@ -1,7 +1,8 @@
 #ifndef CLIENT_UTILS_H
 #define CLIENT_UTILS_H
 
-#include <stdlib.h> // pid_t
+#include <unistd.h>  // pid_t
+#include <stdbool.h> // boolean type
 
 /*
  *  Estruturas
@@ -15,7 +16,7 @@ struct client_info{
 /*
  *  Assinaturas
  */
-long hashing(char username[16]);
-// função p/ converter o nome de usuário para um código hash
+bool checkArgs(int argc, char **argv);
+// função p/ verificar os parâmetros de entrada
 
 #endif // CLIENT_UTILS_H

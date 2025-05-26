@@ -15,8 +15,8 @@
  */
 #include <stdlib.h>     // multiprocessing, exit()
 #include <stdio.h>      // I/O
-#include <stdbool.h>    // bool typedef
-#include <unistd.h>     // close()
+#include <stdbool.h>    // boolean type
+#include <unistd.h>     // typedefs
 #include <arpa/inet.h>  // inet_pton(), htons(), etc.
 #include <sys/socket.h> // socket(), connect(), bind(), listen(), accept()
 #include <netinet/in.h> // struct sockaddr_in
@@ -28,6 +28,7 @@
 #include <errno.h>      // nº do último erro
 
 #include "client_utils.h"
+#include "comm_utils.h"
 
 /*
  *  Definições
@@ -183,6 +184,7 @@ int main(int argc, char **argv){
                     char buffer[BUFFER_SIZE];
 
                     while(running == true){
+                    // recebe mensagens do cliente e encaminha para os outros membros do grupo
 
                         ssize_t rcvd = recv(client_fd,
                                             buffer,
@@ -216,6 +218,7 @@ int main(int argc, char **argv){
                 // saída
 
                     while(running == true){
+                    // lê mensagens dos outros membros do grupo e encaminha para o cliente
 
                         ssize_t sent = send(client_fd,
                                             &client.secret,

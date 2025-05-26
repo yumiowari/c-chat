@@ -15,8 +15,8 @@
  */
 #include <stdlib.h>     // exit()
 #include <stdio.h>      // I/O
-#include <stdbool.h>    // bool typedef
-#include <unistd.h>     // close()
+#include <stdbool.h>    // boolean type
+#include <unistd.h>     // typedefs
 #include <arpa/inet.h>  // inet_pton(), htons(), etc.
 #include <sys/socket.h> // socket(), connect(), bind(), listen(), accept()
 #include <netinet/in.h> // struct sockaddr_in
@@ -28,6 +28,7 @@
 #include <errno.h>      // nº do último erro
 
 #include "client_utils.h"
+#include "comm_utils.h"
 
 /*
  *  Definições
@@ -64,9 +65,6 @@ void gracefulShutdown();
 void crashLanding(char *e);
 // rotina de encerramento em caso de falha
 
-bool checkArgs(int argc, char **argv);
-// função p/ verificar os parâmetros de entrada
-
 int main(int argc, char **argv){
     struct sockaddr_in server_addr;   // endereço do servidor, especialmente para IPv4
     struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
@@ -84,7 +82,7 @@ int main(int argc, char **argv){
     // define as informações de cliente
     struct client_info client;
     strcpy(client.username, argv[1]);
-    client.secret = hashing(client.username);
+    client.secret = atoi(argv[2]);
 
     // configura o tratamento de sinais...
     signal(SIGINT, handleSIGINT);
@@ -143,6 +141,7 @@ int main(int argc, char **argv){
             long secret;
 
             while(running == true){
+            // recebe mensagens do servidor
 
                 ssize_t rcvd = recv(client_fd,
                                     &secret,
@@ -184,6 +183,7 @@ int main(int argc, char **argv){
             timeout.tv_usec = 250000; // 250ms
 
             while(running == true){
+            // envia mensagens ao servidor
 
                 FD_ZERO(&fds);              // "limpa" o conjunto de descritores de arquivo
                 FD_SET(STDIN_FILENO, &fds); // e adiciona o descritor de stdin
@@ -255,44 +255,4 @@ void crashLanding(char *e){
     close(client_fd);
 
     exit(EXIT_FAILURE);
-}
-
-bool checkArgs(int argc, char **argv){
-// função p/ verificar os parâmetros de entrada
-
-    bool flag = true;
-
-    if(argc == 2){
-        if(strlen(argv[1]) > 15){
-            fprintf(stderr, "O nome de usuário não pode exceder 15 caracteres.\n");
-
-            flag = false;
-        }
-
-        if(flag == true){
-            for(int i = 0; i < strlen(argv[1]); i++){
-                if(argv[1][i] >= 'A' && argv[1][i] <= 'Z'){
-
-                }else if(argv[1][i] >= 'a' && argv[1][i] <= 'z'){
-
-                }else if(argv[1][i] == '_'){
-
-                }else{
-                    fprintf(stderr, "Caracteres inválidos para nome de usuário.\n"
-                                    "Uso: A-Z a-z _\n");
-
-                    flag = false;
-
-                    break;
-                }
-            }
-        }
-    }else{
-        fprintf(stderr, "Parâmetros inválidos.\n"
-                        "Uso: ./client <username>\n");
-
-        flag = false;
-    }
-
-    return flag;
 }

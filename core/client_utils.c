@@ -1,25 +1,60 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "client_utils.h"
 
 /*
  *  Funções
  */
-long hashing(char username[16]){
-// função p/ converter o nome de usuário para um código hash
+bool checkArgs(int argc, char **argv){
+// função p/ verificar os parâmetros de entrada
 
-    long secret = 0;
-    int p = 1;
+    bool flag = true;
 
-    for(int i = 0; i < strlen(username); i++){
-        if(username[i] >= 'A' && username[i] <= 'Z'){
-            secret += (username[i] - 'A') * p;
-        }else if(username[i] >= 'a' && username[i] <= 'z'){
-            secret += (username[i] - 'a') * p;
+    if(argc == 3){
+        if(strlen(argv[1]) > 15){
+            fprintf(stderr, "O nome de usuário não pode exceder 15 caracteres.\n");
+
+            flag = false;
         }
 
-        p *= 10;
+        if(flag == true){
+            // verifica o nome de usuário
+            for(int i = 0; i < strlen(argv[1]); i++){
+                if(
+                   argv[2][i] < 'A' && argv[2][i] > 'Z' &&
+                   argv[2][i] < 'a' && argv[2][i] > 'z' &&
+                   argv[2][i] != '_'
+                  ){
+                    fprintf(stderr, "Caracteres inválidos para nome de usuário.\n"
+                                    "Uso: A-Z a-z _\n");
+
+                    flag = false;
+
+                    break;
+                }
+            }
+        }
+
+        if(flag == true){
+            // verifica o segredo
+            for(int i = 0; i < strlen(argv[2]); i++){
+                if(argv[2][i] < '0' || argv[2][i] > '9'){
+                    flag = false;
+
+                    break;
+                }
+            }
+        }
+    }else{
+        fprintf(stderr, "Parâmetros inválidos.\n"
+                        "Uso: ./client <username>\n");
+
+        flag = false;
     }
 
-    return secret;
+    return flag;
 }
