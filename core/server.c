@@ -61,6 +61,9 @@ int children_qty = 0;                 // contador de filhos (solução temporár
 struct server setupComm(int argc, char **argv);
 // módulo p/ estabelecer conexão cliente-servidor
 
+struct client tryAccept(struct server server);
+// tentar aceitar uma nova conexão com um cliente
+
 void handleSIGINT(int signal);
 // função p/ tratar o sinal de interrupção (CTRL + C)
 
@@ -93,35 +96,7 @@ int main(int argc, char **argv){
     while(running == true){
     // loop do servidor
 
-        // aceita uma nova conexão...
-        client_fd = accept(server_fd,
-                           server.server_addr_ptr,
-                           &server.server_addr_len);
-        if(client_fd < 0){
-            sleep(1);
-
-            continue;
-        }
-
-        // recebe os dados do cliente
-        struct client client;
-        ssize_t rcvd = recv(client_fd,
-                            &client,
-                            sizeof(client),
-                            0);
-        if(rcvd <= 0){
-            if(rcvd == 0){
-            // conexão perdida
-
-                printf("Conexão perdida com o cliente.\n");
-                            
-                gracefulShutdown(1);
-            }else{
-                FORMAT_ERROR(error, "Falha na recepção das informações do cliente: ");
-                                                        
-                crashLanding(1, error);
-            }
-        }
+        struct client client = tryAccept(server);
 
         printf("Conexão estabelecida com %s!\n", client.username);
 
@@ -197,7 +172,7 @@ int main(int argc, char **argv){
                                                     
                             crashLanding(1, error);
                         }else{
-                            sleep(1);
+                            sleep(1); // espera 1 segundo antes da próxima mensagem
                         }
                     }
                 }
@@ -280,6 +255,45 @@ struct server setupComm(int argc, char **argv){
     server.server_addr_len = server_addr_len;
 
     return server;
+}
+
+struct client tryAccept(struct server server){
+// tentar aceitar uma nova conexão com um cliente
+
+    char error[BUFFER_SIZE];
+
+    while(running){
+        client_fd = accept(server_fd,
+                           server.server_addr_ptr,
+                           &server.server_addr_len);
+        if(client_fd < 0){
+            sleep(1);
+
+            continue;
+        }
+
+        // recebe os dados do cliente
+        struct client client;
+        ssize_t rcvd = recv(client_fd,
+                            &client,
+                            sizeof(client),
+                            0);
+        if(rcvd <= 0){
+            if(rcvd == 0){
+            // conexão perdida
+
+                printf("Conexão perdida com o cliente.\n");
+                            
+                gracefulShutdown(1);
+            }else{
+                FORMAT_ERROR(error, "Falha na recepção das informações do cliente: ");
+                                                        
+                crashLanding(1, error);
+            }
+        }
+
+        return client;
+    }
 }
 
 void handleSIGINT(int signal){
