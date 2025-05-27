@@ -27,7 +27,8 @@
 #include <stdatomic.h>  // atomic_bool typedef
 #include <errno.h>      // nº do último erro
 #include <sys/ipc.h>    // ftok()
-#include <sys/shm.h>    // shmget(), shmat(), shmdt(), shmctl()
+#include <sys/shm.h>    // shared memory
+#include <sys/sem.h>    // semaphore
 
 #include "server_utils.h" // struct server
 #include "client_utils.h" // struct client
@@ -138,12 +139,18 @@ int main(int argc, char **argv){
             signal(SIGINT,  SIG_IGN);
             signal(SIGTERM, handleSIGTERM);
 
-            // cria o arquivo no disco rígido
-            sprintf(path, "./tmp/%ld", client.secret);
+            // inicia os espaços de memória compartilhados
+            sprintf(path, "./tmp/shm_%ld", client.secret);
             FILE *f = fopen(path, "a");
             if(f)fclose(f);
 
             client.shm_key = ftok(path, PROJECT_ID);
+
+            sprintf(path, "./tmp/sem_%ld", client.secret);
+            f = fopen(path, "a");
+            if(f)fclose(f);
+
+            client.sem_key = ftok(path, PROJECT_ID);
             
             if(flag == false){
             // é o processo que cria o segmento de memória compartilhado
@@ -152,7 +159,22 @@ int main(int argc, char **argv){
                 if(client.shm_id < 0){
                     FORMAT_ERROR(error, "Falha na criação do espaço de memória compartilhado: ");
 
-                    crashLanding(0, error);
+                    crashLanding(1, error);
+                }
+
+                client.sem_id = semget(client.sem_key, 1, IPC_CREAT | 0666);
+                if(client.sem_id < 0){
+                    FORMAT_ERROR(error, "Falha na criação do semáforo compartilhado: ");
+
+                    crashLanding(1, error);
+                }
+
+                union semun sem_attr;
+                sem_attr.val = 1;
+                if(semctl(client.sem_id, 0, SETVAL, sem_attr) == -1){
+                    FORMAT_ERROR(error, "Falha ao atribuir o valor inicial ao semáforo: ");
+
+                    crashLanding(1, error);
                 }
             }else{
             // é o processo que acessa o segmento de memória compartilhado
@@ -161,7 +183,14 @@ int main(int argc, char **argv){
                 if(client.shm_id < 0){
                     FORMAT_ERROR(error, "Falha no acesso ao espaço de memória compartilhado: ");
 
-                    crashLanding(0, error);
+                    crashLanding(1, error);
+                }
+
+                client.sem_id = semget(client.sem_key, 1, 0666); // sem IPC_CREAT
+                if(client.sem_id < 0){
+                    FORMAT_ERROR(error, "Falha no acesso ao semáforo compartilhado: ");
+
+                    crashLanding(1, error);
                 }
             }
             
@@ -208,6 +237,13 @@ int main(int argc, char **argv){
 
                         wrap(buffer, username, secret, message);
 
+                        // entra na seção crítica
+                        if(sem_wait(client.sem_id) == false){
+                            FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
+
+                            crashLanding(1, error);
+                        }
+
                         // encaminha a mensagem para os outros membros do grupo
                         client.shm_ptr = (char*) shmat(client.shm_id, NULL, 0);
                         if(client.shm_ptr == (char*) -1){
@@ -216,9 +252,17 @@ int main(int argc, char **argv){
                             crashLanding(1, error);
                         }
 
-                        strcat(client.shm_ptr, buffer);
+                        // escreve o buffer na memória compartilhada
+                        strcpy(client.shm_ptr, buffer);
 
                         shmdt(client.shm_ptr); // libera o segmento de memória compartilhado
+
+                        // sai da seção crítica
+                        if(sem_signal(client.sem_id) == false){
+                            FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+
+                            crashLanding(1, error);
+                        }
 
                         memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
                     }
@@ -236,6 +280,13 @@ int main(int argc, char **argv){
                     while(running == true){
                     // lê mensagens dos outros membros do grupo e encaminha para o cliente
 
+                        // entra na seção crítica
+                        if(sem_wait(client.sem_id) == false){
+                            FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
+
+                            crashLanding(1, error);
+                        }
+
                         // recebe a mensagem de outro membro do grupo
                         client.shm_ptr = (char*) shmat(client.shm_id, NULL, 0);
                         if(client.shm_ptr == (char*) -1){
@@ -244,9 +295,17 @@ int main(int argc, char **argv){
                             crashLanding(1, error);
                         }
 
-                        strcat(buffer, client.shm_ptr);
+                        // lê o buffer na memória compartilhada
+                        strcpy(buffer, client.shm_ptr);
 
                         shmdt(client.shm_ptr);
+
+                        // sai da seção crítica
+                        if(sem_signal(client.sem_id) == false){
+                            FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+
+                            crashLanding(1, error);
+                        }
 
                         // encaminha a mensagem para o cliente
                         ssize_t sent = send(client_fd,
