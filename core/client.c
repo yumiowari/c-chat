@@ -28,8 +28,8 @@
 #include <errno.h>      // nº do último erro
 #include <unistd.h>     // close()
 
-#include "client_utils.h"
-#include "comm_utils.h"
+#include "client_utils.h" // struct client
+#include "comm_utils.h"   // wrap(), unwrap()
 
 /*
  *  Definições
@@ -41,7 +41,7 @@
 /*
  *  Macros
  */
-#define FORMAT_ERROR(error, prefix) strcpy(error, prefix); strcat(error, strerror(errno));
+#define FORMAT_ERROR(error, prefix) strcpy(error, prefix); if(errno != 0)strcat(error, strerror(errno));
 
 /*
  *  Variáveis Globais
@@ -81,14 +81,17 @@ int main(int argc, char **argv){
         {
         // entrada
 
+            char buffer[BUFFER_SIZE];
+            char username[16];
             long secret;
+            char message[BUFFER_SIZE];
 
             while(running == true){
             // recebe mensagens do servidor
 
                 ssize_t rcvd = recv(client_fd,
-                                    &secret,
-                                    sizeof(secret),
+                                    buffer,
+                                    BUFFER_SIZE,
                                     0);
                 if(rcvd <= 0){
                     if(rcvd == 0){
@@ -103,9 +106,18 @@ int main(int argc, char **argv){
                         crashLanding(error);
                     }
                 }else{
-                    if(secret != client.secret){
-                        FORMAT_ERROR(error, "A verificação do segredo falhou: "
-                                            "A conexão pode ser insegura.\n");
+                    buffer[rcvd] = '\0';
+
+                    unwrap(buffer, username, &secret, message);
+
+                    if(secret == client.secret){
+                        if(strcmp(username, client.username) != 0){
+                            # pragma omp critical
+                            printf("%s: %s\n", username, message);
+                        }
+                    }else{
+                        FORMAT_ERROR(error, "Não foi possível validar a mensagem.\n"
+                                            "A conexão é insegura.\n");
 
                         crashLanding(error);
                     }
@@ -118,6 +130,7 @@ int main(int argc, char **argv){
         // saída
 
             char buffer[BUFFER_SIZE];
+            char message[BUFFER_SIZE];
             fd_set fds; // conjunto de file descriptors
 
             // define o tempo máx. de espera
@@ -138,8 +151,10 @@ int main(int argc, char **argv){
 
                     #pragma omp critical
                     {
-                        if(fgets(buffer, BUFFER_SIZE, stdin)){
-                            buffer[strcspn(buffer, "\n")] = '\0'; // remove a quebra de linha, se houver
+                        if(fgets(message, BUFFER_SIZE, stdin)){
+                            message[strcspn(message, "\n")] = '\0'; // remove a quebra de linha, se houver
+                            
+                            wrap(buffer, client.username, client.secret, message);
 
                             ssize_t sent = send(client_fd,
                                                 buffer,

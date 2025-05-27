@@ -19,4 +19,7 @@ struct server{
 bool checkServerArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
 
+bool compareBuffers(char *A, char *B);
+// função p/ comparar os buffers A e B
+
 #endif // SERVER_UTILS_H
