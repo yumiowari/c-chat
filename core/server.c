@@ -276,6 +276,8 @@ int main(int argc, char **argv){
                     char username[16];
                     long secret;
                     char message[BUFFER_SIZE];
+                    char aux_buffer[BUFFER_SIZE];
+                    aux_buffer[0] = '\0';
 
                     while(running == true){
                     // lê mensagens dos outros membros do grupo e encaminha para o cliente
@@ -298,6 +300,25 @@ int main(int argc, char **argv){
                         // lê o buffer na memória compartilhada
                         strcpy(buffer, client.shm_ptr);
 
+                        // compara o buffer lido com o buffer anterior
+                        if(compareBuffers(buffer, aux_buffer) == false){
+
+                            shmdt(client.shm_ptr);
+
+                            // sai da seção crítica
+                            if(sem_signal(client.sem_id) == false){
+                                FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+
+                                crashLanding(1, error);
+                            }
+
+                            sleep(0.25); // espera 250ms
+
+                            continue; // é uma mensagem repetida
+                        }else{
+                            strcpy(aux_buffer, buffer); // é uma nova mensagem
+                        }
+
                         shmdt(client.shm_ptr);
 
                         // sai da seção crítica
@@ -316,8 +337,6 @@ int main(int argc, char **argv){
                             FORMAT_ERROR(error, "Falha no envio da mensagem ao cliente: ");
                                                     
                             crashLanding(1, error);
-                        }else{
-                            sleep(1); // espera 1 segundo antes da próxima mensagem
                         }
 
                         memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
