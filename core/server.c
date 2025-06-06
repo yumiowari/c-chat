@@ -30,9 +30,8 @@
 #include <sys/shm.h>    // shared memory
 #include <sys/sem.h>    // semaphore
 
-#include "server_utils.h" // struct server
-#include "client_utils.h" // struct client
-#include "comm_utils.h"   // wrap(), unwrap()
+#include "server_utils.h" // server_t
+#include "client_utils.h" // client_t, sem_wait(), sem_open()
 
 /*
  *  Definições
@@ -53,7 +52,7 @@
 int server_fd,
     client_fd;
 bool running = true;
-struct client children[MAX_CHILDREN]; // array de processos filhos (clientes)
+client_t children[MAX_CHILDREN]; // array de processos filhos (clientes)
 int children_qty = 0;                 // contador de filhos (solução temporária)
 int secrets[MAX_CHILDREN]; // array de secrets
 int secrets_qty = 0;       // contador de secrets
@@ -61,10 +60,10 @@ int secrets_qty = 0;       // contador de secrets
 /*
  *  Assinaturas
  */
-struct server setupComm(int argc, char **argv);
+server_t setupComm(int argc, char **argv);
 // módulo p/ estabelecer conexão cliente-servidor
 
-struct client tryAccept(struct server server);
+client_t tryAccept(server_t server);
 // tentar aceitar uma nova conexão com um cliente
 
 void handleSIGINT(int signal);
@@ -79,7 +78,7 @@ void handleSIGTERM(int signal);
 void gracefulShutdown(int context);
 // rotina de encerramento gracioso
 
-void crashLanding(int context, char *e);
+void crashLanding(int context, char *error);
 // rotina de encerramento em caso de falha
 
 void killOffspring();
@@ -94,14 +93,14 @@ int main(int argc, char **argv){
     signal(SIGINT,  handleSIGINT);
     signal(SIGCHLD, handleSIGCHLD);
 
-    struct server server = setupComm(argc, argv);
+    server_t server = setupComm(argc, argv);
 
     printf("Servidor on-line e ouvindo na porta %d!\n", server.port);
 
-    while(running == true){
+    while(running){
     // loop do servidor
 
-        struct client client = tryAccept(server);
+        client_t client = tryAccept(server);
 
         printf("Conexão estabelecida com %s!\n", client.username);
 
@@ -201,18 +200,18 @@ int main(int argc, char **argv){
                 {
                 // entrada
 
-                    char buffer[BUFFER_SIZE];
-                    char username[16];
-                    long secret;
-                    char message[BUFFER_SIZE];
-
-                    while(running == true){
+                    while(running){
                     // recebe mensagens do cliente e encaminha para os outros membros do grupo
+
+                        message_t message;
+                        memset(message.buffer, 0, 1024);
+                        memset(message.username, 0, 16);
+                        message.secret = -1;
 
                         // recebe a mensagem do cliente
                         ssize_t rcvd = recv(client_fd,
-                                            buffer,
-                                            BUFFER_SIZE,
+                                            &message,
+                                            sizeof(message_t),
                                             0);
                         if(rcvd <= 0){
                             if(rcvd == 0){
@@ -227,15 +226,14 @@ int main(int argc, char **argv){
                                 crashLanding(1, error);
                             }
                         }
-                            
-                        buffer[rcvd] = '\0';
-
-                        unwrap(buffer, username, &secret, message);
 
                         #pragma omp critical
-                        printf("(%ld:%d) %s: %s\n", secret, getpid(), username, message);
-
-                        wrap(buffer, username, secret, message);
+                        {
+                        printf("(%ld:%d) %s: %s\n", message.secret,
+                                                    getpid(),
+                                                    message.username,
+                                                    message.buffer);
+                        }
 
                         // entra na seção crítica
                         if(sem_wait(client.sem_id) == false){
@@ -245,26 +243,24 @@ int main(int argc, char **argv){
                         }
 
                         // encaminha a mensagem para os outros membros do grupo
-                        client.shm_ptr = (char*) shmat(client.shm_id, NULL, 0);
-                        if(client.shm_ptr == (char*) -1){
+                        client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
+                        if(client.shm_ptr == (message_t*) -1){
                             FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
 
                             crashLanding(1, error);
                         }
 
-                        // escreve o buffer na memória compartilhada
-                        strcpy(client.shm_ptr, buffer);
+                        // escreve na memória compartilhada
+                        *client.shm_ptr = message;
 
                         shmdt(client.shm_ptr); // libera o segmento de memória compartilhado
 
                         // sai da seção crítica
-                        if(sem_signal(client.sem_id) == false){
+                        if(sem_open(client.sem_id) == false){
                             FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
 
                             crashLanding(1, error);
                         }
-
-                        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
                     }
                 }
 
@@ -272,15 +268,15 @@ int main(int argc, char **argv){
                 {
                 // saída
 
-                    char buffer[BUFFER_SIZE];
-                    char username[16];
-                    long secret;
-                    char message[BUFFER_SIZE];
-                    char aux_buffer[BUFFER_SIZE];
-                    aux_buffer[0] = '\0';
+                    message_t old_msg;
 
-                    while(running == true){
+                    while(running){
                     // lê mensagens dos outros membros do grupo e encaminha para o cliente
+
+                        message_t message;
+                        memset(message.buffer, 0, 1024);
+                        memset(message.username, 0, 16);
+                        message.secret = -1;
 
                         // entra na seção crítica
                         if(sem_wait(client.sem_id) == false){
@@ -290,39 +286,57 @@ int main(int argc, char **argv){
                         }
 
                         // recebe a mensagem de outro membro do grupo
-                        client.shm_ptr = (char*) shmat(client.shm_id, NULL, 0);
-                        if(client.shm_ptr == (char*) -1){
+                        client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
+                        if(client.shm_ptr == (message_t*) -1){
                             FORMAT_ERROR(error, "Falha ao acessar o segmento de memória compartilhado: ");
 
                             crashLanding(1, error);
                         }
 
-                        // lê o buffer na memória compartilhada
-                        strcpy(buffer, client.shm_ptr);
+                        // lê a memória compartilhada
+                        message = *client.shm_ptr;
 
-                        // compara o buffer lido com o buffer anterior
-                        if(compareBuffers(buffer, aux_buffer) == false){
+                        // verifica o buffer da mensagem
+                        if(strlen(message.buffer) == 0){
 
                             shmdt(client.shm_ptr);
 
-                            // sai da seção crítica
-                            if(sem_signal(client.sem_id) == false){
+                            if(sem_open(client.sem_id) == false){
                                 FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
 
                                 crashLanding(1, error);
                             }
 
-                            sleep(0.25); // espera 250ms
+                            usleep(100000); // espera 100ms
+
+                            continue; // não há mensagem válida disponível
+                        }
+
+                        // compara o buffer lido com o buffer antigo
+                        if(strlen(old_msg.buffer) > 0                  &&
+                           strcmp(old_msg.buffer, message.buffer) == 0 &&
+                           strcmp(old_msg.username, message.username) == 0){
+
+                            shmdt(client.shm_ptr);
+
+                            // sai da seção crítica
+                            if(sem_open(client.sem_id) == false){
+                                FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+
+                                crashLanding(1, error);
+                            }
+
+                            usleep(100000); // espera 100ms
 
                             continue; // é uma mensagem repetida
                         }else{
-                            strcpy(aux_buffer, buffer); // é uma nova mensagem
+                            old_msg = message;
                         }
 
                         shmdt(client.shm_ptr);
 
                         // sai da seção crítica
-                        if(sem_signal(client.sem_id) == false){
+                        if(sem_open(client.sem_id) == false){
                             FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
 
                             crashLanding(1, error);
@@ -330,16 +344,14 @@ int main(int argc, char **argv){
 
                         // encaminha a mensagem para o cliente
                         ssize_t sent = send(client_fd,
-                                            buffer,
-                                            strlen(buffer),
+                                            &message,
+                                            sizeof(message_t),
                                             0);
                         if(sent < 0){ // em caso de erro, send() retorna -1
                             FORMAT_ERROR(error, "Falha no envio da mensagem ao cliente: ");
                                                     
                             crashLanding(1, error);
                         }
-
-                        memset(buffer, 0, BUFFER_SIZE); // limpa o buffer
                     }
                 }
             }
@@ -364,7 +376,7 @@ int main(int argc, char **argv){
 /*
  *  Funções
  */
-struct server setupComm(int argc, char **argv){
+server_t setupComm(int argc, char **argv){
 // módulo p/ estabelecer conexão cliente-servidor
 
     struct sockaddr_in server_addr;   // endereço do servidor
@@ -372,7 +384,7 @@ struct server setupComm(int argc, char **argv){
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
     char error[BUFFER_SIZE];
-    struct server server;
+    server_t server;
 
     // verifica os parâmetros de inicialização
     if(checkServerArgs(argc, argv) == false){
@@ -423,7 +435,7 @@ struct server setupComm(int argc, char **argv){
     return server;
 }
 
-struct client tryAccept(struct server server){
+client_t tryAccept(server_t server){
 // tentar aceitar uma nova conexão com um cliente
 
     char error[BUFFER_SIZE];
@@ -433,13 +445,13 @@ struct client tryAccept(struct server server){
                            server.server_addr_ptr,
                            &server.server_addr_len);
         if(client_fd < 0){
-            sleep(1);
+            sleep(1); // espera 1s
 
             continue;
         }
 
         // recebe os dados do cliente
-        struct client client;
+        client_t client;
         ssize_t rcvd = recv(client_fd,
                             &client,
                             sizeof(client),
@@ -479,7 +491,7 @@ void handleSIGCHLD(int signal){
     int status;
     pid_t pid;
     bool flag;
-    struct client client;
+    client_t client;
 
     while((pid = waitpid(-1, &status, WNOHANG)) > 0){
         printf("\nProcesso filho com PID %d terminou.\n", pid);
@@ -536,6 +548,7 @@ void gracefulShutdown(int context){
 
             running = false; // encerra os laços de repetição
             killOffspring();
+            while(children_qty > 0); // espera encerrar todos os processos filhos
             close(server_fd);
 
             break;
@@ -562,9 +575,7 @@ void crashLanding(int context, char *error){
             fprintf(stderr, "%s\n", error);
             fprintf(stderr, "Fim abrupto da aplicação.\n");
 
-            running = false;
-            killOffspring();
-            close(server_fd);
+            gracefulShutdown(context);
 
             break;
 
@@ -574,8 +585,7 @@ void crashLanding(int context, char *error){
             fprintf(stderr, "%s\n", error);
             fprintf(stderr, "Fim abrupto do processo %d.\n", getpid());
 
-            running = false;
-            close(client_fd);
+            gracefulShutdown(context);
 
             break;
     }

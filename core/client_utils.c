@@ -1,6 +1,6 @@
-#include <stdio.h>   // fprintf()
-#include <stdbool.h> // bool type
-#include <string.h>  // strlen()
+#include <stdio.h>     // fprintf()
+#include <stdbool.h>   // bool type
+#include <string.h>    // strlen()
 
 #include "client_utils.h"
 

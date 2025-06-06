@@ -28,8 +28,7 @@
 #include <errno.h>      // nº do último erro
 #include <unistd.h>     // close()
 
-#include "client_utils.h" // struct client
-#include "comm_utils.h"   // wrap(), unwrap()
+#include "client_utils.h" // client_t
 
 /*
  *  Definições
@@ -52,7 +51,7 @@ bool running = true;
 /*
  *  Assinaturas
  */
-struct client setupComm(int argc, char **argv);
+client_t setupComm(int argc, char **argv);
 // módulo p/ estabelecer conexão cliente-servidor
 
 void handleSIGINT(int signal);
@@ -61,7 +60,7 @@ void handleSIGINT(int signal);
 void gracefulShutdown();
 // rotina de encerramento gracioso
 
-void crashLanding(char *e);
+void crashLanding(char *error);
 // rotina de encerramento em caso de falha
 
 int main(int argc, char **argv){
@@ -70,7 +69,7 @@ int main(int argc, char **argv){
     // configura o tratamento de sinais...
     signal(SIGINT, handleSIGINT);
 
-    struct client client = setupComm(argc, argv);
+    client_t client = setupComm(argc, argv);
 
     printf("Conexão estabelecida com o servidor.\n");
 
@@ -81,17 +80,17 @@ int main(int argc, char **argv){
         {
         // entrada
 
-            char buffer[BUFFER_SIZE];
-            char username[16];
-            long secret;
-            char message[BUFFER_SIZE];
-
-            while(running == true){
+            while(running){
             // recebe mensagens do servidor
 
+                message_t message;
+                memset(message.buffer, 0, 1024);
+                memset(message.username, 0, 16);
+                message.secret = -1;
+
                 ssize_t rcvd = recv(client_fd,
-                                    buffer,
-                                    BUFFER_SIZE,
+                                    &message,
+                                    sizeof(message_t),
                                     0);
                 if(rcvd <= 0){
                     if(rcvd == 0){
@@ -106,14 +105,10 @@ int main(int argc, char **argv){
                         crashLanding(error);
                     }
                 }else{
-                    buffer[rcvd] = '\0';
-
-                    unwrap(buffer, username, &secret, message);
-
-                    if(secret == client.secret){
-                        if(strcmp(username, client.username) != 0){
+                    if(message.secret == client.secret){
+                        if(strcmp(message.username, client.username) != 0){
                             # pragma omp critical
-                            printf("%s: %s\n", username, message);
+                            printf("%s: %s\n", message.username, message.buffer);
                         }
                     }else{
                         FORMAT_ERROR(error, "Não foi possível validar a mensagem.\n"
@@ -130,7 +125,6 @@ int main(int argc, char **argv){
         // saída
 
             char buffer[BUFFER_SIZE];
-            char message[BUFFER_SIZE];
             fd_set fds; // conjunto de file descriptors
 
             // define o tempo máx. de espera
@@ -138,8 +132,13 @@ int main(int argc, char **argv){
             timeout.tv_sec = 0;
             timeout.tv_usec = 250000; // 250ms
 
-            while(running == true){
+            while(running){
             // envia mensagens ao servidor
+
+                message_t message;
+                memset(message.buffer, 0, 1024);
+                memset(message.username, 0, 16);
+                message.secret = -1;
 
                 FD_ZERO(&fds);              // "limpa" o conjunto de descritores de arquivo
                 FD_SET(STDIN_FILENO, &fds); // e adiciona o descritor de stdin
@@ -151,14 +150,16 @@ int main(int argc, char **argv){
 
                     #pragma omp critical
                     {
-                        if(fgets(message, BUFFER_SIZE, stdin)){
-                            message[strcspn(message, "\n")] = '\0'; // remove a quebra de linha, se houver
+                        if(fgets(buffer, BUFFER_SIZE, stdin)){
+                            buffer[strcspn(buffer, "\n")] = '\0'; // remove a quebra de linha, se houver
                             
-                            wrap(buffer, client.username, client.secret, message);
+                            strcpy(message.buffer, buffer);
+                            strcpy(message.username, client.username);
+                            message.secret = client.secret;
 
                             ssize_t sent = send(client_fd,
-                                                buffer,
-                                                strlen(buffer),
+                                                &message,
+                                                sizeof(message_t),
                                                 0);
                             if(sent < 0){ // em caso de erro, send() retorna -1
                                 FORMAT_ERROR(error, "Falha no envio da mensagem ao servidor: ");
@@ -180,7 +181,7 @@ int main(int argc, char **argv){
 /*
  *  Funções
  */
-struct client setupComm(int argc, char **argv){
+client_t setupComm(int argc, char **argv){
 // módulo p/ estabelecer conexão cliente-servidor
 
     struct sockaddr_in server_addr;   // endereço do servidor
@@ -188,7 +189,7 @@ struct client setupComm(int argc, char **argv){
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
     char error[BUFFER_SIZE];
-    struct client client;
+    client_t client;
     int port;
 
     // verifica os parâmetros de inicialização
@@ -268,14 +269,13 @@ void gracefulShutdown(){
     exit(EXIT_SUCCESS);
 }
 
-void crashLanding(char *e){
+void crashLanding(char *error){
 // rotina de encerramento em caso de falha
 
-    fprintf(stderr, "%s\n", e);
+    fprintf(stderr, "%s\n", error);
     fprintf(stderr, "Fim abrupto da aplicação.\n");
 
-    running = false;
-    close(client_fd);
+    gracefulShutdown();
 
     exit(EXIT_FAILURE);
 }
