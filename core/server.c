@@ -79,7 +79,7 @@ void handleSIGTERM(int signal);
 void gracefulShutdown(int context);
 // rotina de encerramento gracioso
 
-void crashLanding(int context, char *e);
+void crashLanding(int context, char *error);
 // rotina de encerramento em caso de falha
 
 void killOffspring();
@@ -98,7 +98,7 @@ int main(int argc, char **argv){
 
     printf("Servidor on-line e ouvindo na porta %d!\n", server.port);
 
-    while(running == true){
+    while(running){
     // loop do servidor
 
         struct client client = tryAccept(server);
@@ -206,7 +206,7 @@ int main(int argc, char **argv){
                     long secret;
                     char message[BUFFER_SIZE];
 
-                    while(running == true){
+                    while(running){
                     // recebe mensagens do cliente e encaminha para os outros membros do grupo
 
                         // recebe a mensagem do cliente
@@ -279,7 +279,7 @@ int main(int argc, char **argv){
                     char aux_buffer[BUFFER_SIZE];
                     aux_buffer[0] = '\0';
 
-                    while(running == true){
+                    while(running){
                     // lê mensagens dos outros membros do grupo e encaminha para o cliente
 
                         // entra na seção crítica
@@ -536,6 +536,7 @@ void gracefulShutdown(int context){
 
             running = false; // encerra os laços de repetição
             killOffspring();
+            while(children_qty > 0); // espera encerrar todos os processos filhos
             close(server_fd);
 
             break;
@@ -562,9 +563,7 @@ void crashLanding(int context, char *error){
             fprintf(stderr, "%s\n", error);
             fprintf(stderr, "Fim abrupto da aplicação.\n");
 
-            running = false;
-            killOffspring();
-            close(server_fd);
+            gracefulShutdown(context);
 
             break;
 
@@ -574,8 +573,7 @@ void crashLanding(int context, char *error){
             fprintf(stderr, "%s\n", error);
             fprintf(stderr, "Fim abrupto do processo %d.\n", getpid());
 
-            running = false;
-            close(client_fd);
+            gracefulShutdown(context);
 
             break;
     }

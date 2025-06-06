@@ -61,7 +61,7 @@ void handleSIGINT(int signal);
 void gracefulShutdown();
 // rotina de encerramento gracioso
 
-void crashLanding(char *e);
+void crashLanding(char *error);
 // rotina de encerramento em caso de falha
 
 int main(int argc, char **argv){
@@ -86,7 +86,7 @@ int main(int argc, char **argv){
             long secret;
             char message[BUFFER_SIZE];
 
-            while(running == true){
+            while(running){
             // recebe mensagens do servidor
 
                 ssize_t rcvd = recv(client_fd,
@@ -138,7 +138,7 @@ int main(int argc, char **argv){
             timeout.tv_sec = 0;
             timeout.tv_usec = 250000; // 250ms
 
-            while(running == true){
+            while(running){
             // envia mensagens ao servidor
 
                 FD_ZERO(&fds);              // "limpa" o conjunto de descritores de arquivo
@@ -268,10 +268,10 @@ void gracefulShutdown(){
     exit(EXIT_SUCCESS);
 }
 
-void crashLanding(char *e){
+void crashLanding(char *error){
 // rotina de encerramento em caso de falha
 
-    fprintf(stderr, "%s\n", e);
+    fprintf(stderr, "%s\n", error);
     fprintf(stderr, "Fim abrupto da aplicação.\n");
 
     running = false;
