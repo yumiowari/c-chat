@@ -1,3 +1,6 @@
+/*
+ *  Bibliotecas
+ */
 #include <stdio.h>   // fprintf()
 #include <stdbool.h> // bool type
 #include <string.h>  // strlen()
@@ -30,13 +33,4 @@ bool checkServerArgs(int argc, char **argv){
     }
 
     return flag;
-}
-
-bool compareBuffers(char *A, char *B){
-// função p/ comparar os buffers A e B
-
-    if(strcmp(A, B) == 0)
-        return false; // as strings são iguais
-    else
-        return true; // as strings são diferentes
 }
