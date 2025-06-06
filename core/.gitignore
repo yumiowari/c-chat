@@ -1,2 +1,5 @@
 /server
 /client
+/client_utils.o
+/server_utils.o
+/comm_utils.o
