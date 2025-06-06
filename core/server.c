@@ -31,8 +31,7 @@
 #include <sys/sem.h>    // semaphore
 
 #include "server_utils.h" // server_t
-#include "client_utils.h" // client_t
-#include "comm_utils.h"   // wrap(), unwrap()
+#include "client_utils.h" // client_t, sem_wait(), sem_open()
 
 /*
  *  Definições
@@ -257,7 +256,7 @@ int main(int argc, char **argv){
                         shmdt(client.shm_ptr); // libera o segmento de memória compartilhado
 
                         // sai da seção crítica
-                        if(sem_signal(client.sem_id) == false){
+                        if(sem_open(client.sem_id) == false){
                             FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
 
                             crashLanding(1, error);
@@ -302,7 +301,7 @@ int main(int argc, char **argv){
 
                             shmdt(client.shm_ptr);
 
-                            if(sem_signal(client.sem_id) == false){
+                            if(sem_open(client.sem_id) == false){
                                 FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
 
                                 crashLanding(1, error);
@@ -321,7 +320,7 @@ int main(int argc, char **argv){
                             shmdt(client.shm_ptr);
 
                             // sai da seção crítica
-                            if(sem_signal(client.sem_id) == false){
+                            if(sem_open(client.sem_id) == false){
                                 FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
 
                                 crashLanding(1, error);
@@ -337,7 +336,7 @@ int main(int argc, char **argv){
                         shmdt(client.shm_ptr);
 
                         // sai da seção crítica
-                        if(sem_signal(client.sem_id) == false){
+                        if(sem_open(client.sem_id) == false){
                             FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
 
                             crashLanding(1, error);
@@ -446,7 +445,7 @@ client_t tryAccept(server_t server){
                            server.server_addr_ptr,
                            &server.server_addr_len);
         if(client_fd < 0){
-            sleep(1);
+            sleep(1); // espera 1s
 
             continue;
         }

@@ -29,7 +29,6 @@
 #include <unistd.h>     // close()
 
 #include "client_utils.h" // client_t
-#include "comm_utils.h"   // wrap(), unwrap()
 
 /*
  *  Definições

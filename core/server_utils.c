@@ -4,6 +4,7 @@
 #include <stdio.h>   // fprintf()
 #include <stdbool.h> // bool type
 #include <string.h>  // strlen()
+#include <sys/sem.h> // semaphore
 
 #include "server_utils.h"
 
@@ -33,4 +34,29 @@ bool checkServerArgs(int argc, char **argv){
     }
 
     return flag;
+}
+
+bool sem_wait(int sem_id){
+// função p/ esperar o semáforo abrir
+
+    // operação P: decrementa o valor do semáforo.
+    // se ele for zero ou menor, o processo bloqueia e espera.
+    struct sembuf op = {0, -1, 0};
+    if(semop(sem_id, &op, 1) == 1)
+        return false;
+    else
+        return true;
+}
+
+bool sem_open(int sem_id){
+// função p/ liberar o semáforo
+    
+    // operação V: incrementa o valor do semáforo.
+    // se algum processo estiver bloqueado esperando,
+    // ele será desbloqueado.
+    struct sembuf op = {0, 1, 0};
+    if(semop(sem_id, &op, 1) == 1)
+        return false;
+    else
+        return true;
 }

@@ -16,10 +16,23 @@ struct server{
     int port; // porta
 }typedef(server_t);
 
+union semun{
+    int             val;
+    struct semid_ds *buf;
+    unsigned short  *array;
+    struct seminfo  *__buf;
+};
+
 /*
  *  Assinaturas
  */
 bool checkServerArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
+
+bool sem_wait(int sem_id);
+// função p/ esperar o semáforo abrir
+
+bool sem_open(int sem_id);
+// função p/ liberar o semáforo
 
 #endif // SERVER_UTILS_H
