@@ -53,7 +53,7 @@ int server_fd,
     client_fd;
 bool running = true;
 client_t children[MAX_CHILDREN]; // array de processos filhos (clientes)
-int children_qty = 0;                 // contador de filhos (solução temporária)
+int children_qty = 0;            // contador de filhos (solução temporária)
 int secrets[MAX_CHILDREN]; // array de secrets
 int secrets_qty = 0;       // contador de secrets
 
@@ -84,6 +84,9 @@ void crashLanding(int context, char *error);
 void killOffspring();
 // função p/ matar os processos filhos
 
+int updateGroup(long secret, char action);
+// função p/ atualizar o contador dos grupos
+
 int main(int argc, char **argv){
     char error[BUFFER_SIZE];
     char path[32];
@@ -101,6 +104,8 @@ int main(int argc, char **argv){
     // loop do servidor
 
         client_t client = tryAccept(server);
+
+        updateGroup(client.secret, '+'); // atualiza o contador do grupo
 
         printf("Conexão estabelecida com %s!\n", client.username);
 
@@ -490,7 +495,7 @@ void handleSIGCHLD(int signal){
 
     int status;
     pid_t pid;
-    bool flag;
+    int flag;
     client_t client;
 
     while((pid = waitpid(-1, &status, WNOHANG)) > 0){
@@ -506,13 +511,15 @@ void handleSIGCHLD(int signal){
 
                 children_qty--;
 
-                flag = false;
+                flag = updateGroup(client.secret, '-'); // atualiza o contador do grupo
+
+                /*flag = false;
                 for(int j = 0; j < children_qty; j++){
                     if(children[j].secret == client.secret){
                         flag = true;
                     }
-                }
-                if(flag == false){
+                }*/
+                if(flag == 1){
                 // se não houver outros membros no grupo
 
                     // remove o segredo do array
@@ -548,7 +555,7 @@ void gracefulShutdown(int context){
 
             running = false; // encerra os laços de repetição
             killOffspring();
-            while(children_qty > 0); // espera encerrar todos os processos filhos
+            while(children_qty > 0); // espera todos os processos filhos encerrarem
             close(server_fd);
 
             break;
@@ -606,5 +613,63 @@ void killOffspring(){
         }else{
             printf("Encerrando processo filho %d...\n", children[i].pid);
         }
+    }
+}
+
+int updateGroup(long secret, char action){
+// função p/ atualizar o contador dos grupos
+
+    FILE *f;
+    char path[64];
+    int qty;
+
+    sprintf(path, "./tmp/qty_%ld", secret);
+
+    switch(action){
+        case '+':
+            f = fopen(path, "r");
+            if(f == NULL){
+            // é o primeiro membro do grupo
+
+                f = fopen(path, "w");
+                qty = 1;
+                fprintf(f, "%d\n", qty);
+                fclose(f);
+            }else{
+            // é um novo membro no grupo
+
+                fscanf(f, "%d", &qty);
+                fclose(f);
+                f = fopen(path, "w");
+                qty++;
+                fprintf(f, "%d\n", qty);
+                fclose(f);
+            }
+
+            return 0;
+
+            break;
+
+        case '-':
+            f = fopen(path, "r");
+            fscanf(f, "%d", &qty);
+            fclose(f);
+            qty--;
+            if(qty > 0){
+
+                f = fopen(path, "w");
+                fprintf(f, "%d\n", qty);
+                fclose(f);
+            }else{
+            // era o último membro do grupo
+            
+                remove(path); // apaga o arquivo
+            
+                return 1; // notifica que o grupo está vazio
+            }
+
+            return 0;
+
+            break;
     }
 }
