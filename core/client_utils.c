@@ -73,3 +73,37 @@ bool checkClientArgs(int argc, char **argv){
 
     return flag;
 }
+
+bool compareMsg(message_t A, message_t B){
+// função p/ verificar se A == B
+
+    if(strcmp(A.username, B.username) == 0 &&
+       strcmp(A.buffer, B.buffer) == 0){
+    // se o remetente e o conteúdo da mensagem forem iguais...
+
+        return true;
+    }
+
+    return false;
+}
+
+void debugMsg(message_t msg){
+// função p/ imprimir os atributos da mensagem
+
+    printf("Remetente: %s\n"
+           "Grupo:     %ld\n"
+           "Conteúdo:  %s\n"
+           "Contador:  %d\n", msg.username,
+                              msg.secret,
+                              msg.buffer,
+                              msg.counter);
+}
+
+void resetMsg(message_t *msg){
+// função p/ resetar os atributos da mensagem
+
+    memset(msg->username, 0, 16);
+    memset(msg->buffer, 0, 1024);
+    msg->secret = -1;
+    msg->counter = -1;
+}

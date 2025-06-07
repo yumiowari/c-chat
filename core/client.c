@@ -87,6 +87,7 @@ int main(int argc, char **argv){
                 memset(message.buffer, 0, 1024);
                 memset(message.username, 0, 16);
                 message.secret = -1;
+                message.counter = -1;
 
                 ssize_t rcvd = recv(client_fd,
                                     &message,
@@ -156,6 +157,7 @@ int main(int argc, char **argv){
                             strcpy(message.buffer, buffer);
                             strcpy(message.username, client.username);
                             message.secret = client.secret;
+                            message.counter = 1; // conceitualmente, o remetente já leu a mensagem
 
                             ssize_t sent = send(client_fd,
                                                 &message,

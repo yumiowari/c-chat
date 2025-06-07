@@ -12,6 +12,7 @@ struct message {
     char username[16];
     long secret;
     char buffer[1024];
+    int counter;
 }typedef(message_t);
 
 struct client{
@@ -35,5 +36,14 @@ struct client{
  */
 bool checkClientArgs(int argc, char **argv);
 // função p/ verificar os parâmetros de entrada
+
+bool compareMsg(message_t A, message_t B);
+// função p/ verificar se A == B
+
+void debugMsg(message_t msg);
+// função p/ imprimir os atributos da mensagem
+
+void resetMsg(message_t *msg);
+// função p/ resetar os atributos da mensagem
 
 #endif // CLIENT_UTILS_H

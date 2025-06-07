@@ -180,6 +180,21 @@ int main(int argc, char **argv){
 
                     crashLanding(1, error);
                 }
+
+                // insere a primeira mensagem no espaço de memória compartilhado
+                message_t tmp_msg;
+                resetMsg(&tmp_msg);
+
+                client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
+                if(client.shm_ptr == (message_t*) -1){
+                    FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
+
+                    crashLanding(1, error);
+                }
+
+                *client.shm_ptr = tmp_msg;
+
+                shmdt(client.shm_ptr); // libera o segmento de memória compartilhado
             }else{
             // é o processo que acessa o segmento de memória compartilhado
 
@@ -209,9 +224,10 @@ int main(int argc, char **argv){
                     // recebe mensagens do cliente e encaminha para os outros membros do grupo
 
                         message_t message;
-                        memset(message.buffer, 0, 1024);
-                        memset(message.username, 0, 16);
-                        message.secret = -1;
+                        resetMsg(&message);
+
+                        message_t aux_msg;
+                        resetMsg(&aux_msg);
 
                         // recebe a mensagem do cliente
                         ssize_t rcvd = recv(client_fd,
@@ -240,88 +256,52 @@ int main(int argc, char **argv){
                                                     message.buffer);
                         }
 
-                        // entra na seção crítica
-                        if(sem_wait(client.sem_id) == false){
-                            FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
+                        // lê a quantidade de membros no grupo
+                        int qty = 0;
+                        sprintf(path, "./tmp/qty_%ld", client.secret);
+                        f = fopen(path, "r");
+                        fscanf(f, "%d", &qty);
+                        fclose(f);
 
-                            crashLanding(1, error);
-                        }
-
-                        // encaminha a mensagem para os outros membros do grupo
-                        client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
-                        if(client.shm_ptr == (message_t*) -1){
-                            FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
-
-                            crashLanding(1, error);
-                        }
-
-                        // escreve na memória compartilhada
-                        *client.shm_ptr = message;
-
-                        shmdt(client.shm_ptr); // libera o segmento de memória compartilhado
-
-                        // sai da seção crítica
-                        if(sem_open(client.sem_id) == false){
-                            FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
-
-                            crashLanding(1, error);
-                        }
-                    }
-                }
-
-                #pragma omp section
-                {
-                // saída
-
-                    message_t old_msg;
-
-                    while(running){
-                    // lê mensagens dos outros membros do grupo e encaminha para o cliente
-
-                        message_t message;
-                        memset(message.buffer, 0, 1024);
-                        memset(message.username, 0, 16);
-                        message.secret = -1;
-
-                        // entra na seção crítica
-                        if(sem_wait(client.sem_id) == false){
-                            FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
-
-                            crashLanding(1, error);
-                        }
-
-                        // recebe a mensagem de outro membro do grupo
-                        client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
-                        if(client.shm_ptr == (message_t*) -1){
-                            FORMAT_ERROR(error, "Falha ao acessar o segmento de memória compartilhado: ");
-
-                            crashLanding(1, error);
-                        }
-
-                        // lê a memória compartilhada
-                        message = *client.shm_ptr;
-
-                        // verifica o buffer da mensagem
-                        if(strlen(message.buffer) == 0){
-
-                            shmdt(client.shm_ptr);
-
-                            if(sem_open(client.sem_id) == false){
-                                FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+                        int curr_qty = -1;
+                        while(curr_qty < qty){
+                            // entra na seção crítica
+                            if(sem_wait(client.sem_id) == false){
+                                FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
 
                                 crashLanding(1, error);
                             }
 
-                            usleep(100000); // espera 100ms
+                            // acessa o espaço de memória compartilhado
+                            client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
+                            if(client.shm_ptr == (message_t*) -1){
+                                FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
 
-                            continue; // não há mensagem válida disponível
-                        }
+                                crashLanding(1, error);
+                            }
 
-                        // compara o buffer lido com o buffer antigo
-                        if(strlen(old_msg.buffer) > 0                  &&
-                           strcmp(old_msg.buffer, message.buffer) == 0 &&
-                           strcmp(old_msg.username, message.username) == 0){
+                            // lê a mensagem no espaço de memória compartilhado
+                            aux_msg = *client.shm_ptr;
+                            printf("(in:shm_%ld:%s)\n", client.secret, client.username);
+                            debugMsg(aux_msg);
+                            if(aux_msg.counter == -1){
+                            // não há mensagem válida no espaço de memória compartilhado
+                            
+                                qty = -1;
 
+                                // escreve a nova mensagem na memória compartilhada
+                                *client.shm_ptr = message;
+                            }else{
+                                curr_qty = aux_msg.counter;
+
+                                // somente se todos os membros do grupo receberam a mensagem...
+                                if(curr_qty == qty){
+                                    // substitui a mensagem na memória compartilhada
+                                    *client.shm_ptr = message;
+                                }
+                            }
+
+                            // libera o segmento de memória compartilhado
                             shmdt(client.shm_ptr);
 
                             // sai da seção crítica
@@ -331,13 +311,92 @@ int main(int argc, char **argv){
                                 crashLanding(1, error);
                             }
 
-                            usleep(100000); // espera 100ms
+                            usleep(250000); // espera 250ms
+                        }
+                    }
+                }
 
-                            continue; // é uma mensagem repetida
-                        }else{
-                            old_msg = message;
+                #pragma omp section
+                {
+                // saída
+
+                    message_t old_msg;
+                    resetMsg(&old_msg);
+
+                    while(running){
+                    // lê mensagens dos outros membros do grupo e encaminha para o cliente
+
+                        message_t message;
+                        resetMsg(&message);
+
+                        // entra na seção crítica
+                        if(sem_wait(client.sem_id) == false){
+                            FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
+
+                            crashLanding(1, error);
                         }
 
+                        // acessa o espaço de memória compartilhado
+                        client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
+                        if(client.shm_ptr == (message_t*) -1){
+                            FORMAT_ERROR(error, "Falha ao acessar o segmento de memória compartilhado: ");
+
+                            crashLanding(1, error);
+                        }
+
+                        // lê a memória compartilhada
+                        message = *client.shm_ptr;
+                        printf("(out:shm_%ld:%s)\n", client.secret, client.username);
+                        debugMsg(message);
+
+                        // verifica se a mensagem é válida
+                        if(message.counter == -1){
+
+                            // libera o segmento de memória compartilhado
+                            shmdt(client.shm_ptr);
+
+                            // sai da seção crítica
+                            if(sem_open(client.sem_id) == false){
+                                FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+
+                                crashLanding(1, error);
+                            }
+
+                            usleep(250000); // espera 250ms
+
+                            continue; // não há mensagem válida disponível
+                        }
+
+                        // verifica se a mensagem é repetida
+                        if(compareMsg(message, old_msg)){
+
+                            // libera o segmento de memória compartilhado
+                            shmdt(client.shm_ptr);
+
+                            // sai da seção crítica
+                            if(sem_open(client.sem_id) == false){
+                                FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+
+                                crashLanding(1, error);
+                            }
+
+                            usleep(250000); // espera 250ms
+
+                            continue; // a mensagem é repetida
+                        }else{
+                        // é uma nova mensagem
+                        
+                            old_msg = message;
+
+                            // somente se a mensagem for de outro membro do grupo...
+                            if(strcmp(message.username, client.username) != 0){
+                                // atualiza o contador da mensagem
+                                message.counter++;
+                                *client.shm_ptr = message;
+                            }
+                        }
+
+                        // libera o segmento de memória compartilhado
                         shmdt(client.shm_ptr);
 
                         // sai da seção crítica
@@ -370,7 +429,6 @@ int main(int argc, char **argv){
             // insere o cliente no array de processos filhos
             client.pid = pid;
             children[children_qty] = client;
-
             children_qty++;
         }
     }
