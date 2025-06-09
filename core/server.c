@@ -24,14 +24,13 @@
 #include <string.h>     // memset()
 #include <signal.h>     // signal()
 #include <wait.h>       // waitpid()
-#include <stdatomic.h>  // atomic_bool typedef
 #include <errno.h>      // nº do último erro
 #include <sys/ipc.h>    // ftok()
 #include <sys/shm.h>    // shared memory
 #include <sys/sem.h>    // semaphore
 
-#include "server_utils.h" // server_t
-#include "client_utils.h" // client_t, sem_wait(), sem_open()
+#include "server_utils.h" // server_t, sem_wait(), sem_open()
+#include "client_utils.h" // client_t, message_t
 
 /*
  *  Definições
@@ -49,6 +48,7 @@
 /*
  *  Variáveis Globais
  */
+// descritores de arquivo dos soquetes
 int server_fd,
     client_fd;
 bool running = true;
@@ -56,6 +56,8 @@ client_t children[MAX_CHILDREN]; // array de processos filhos (clientes)
 int children_qty = 0;            // contador de filhos (solução temporária)
 int secrets[MAX_CHILDREN]; // array de secrets
 int secrets_qty = 0;       // contador de secrets
+char error[BUFFER_SIZE];
+char path[64];
 
 /*
  *  Assinaturas
@@ -64,16 +66,22 @@ server_t setupComm(int argc, char **argv);
 // módulo p/ estabelecer conexão cliente-servidor
 
 client_t tryAccept(server_t server);
-// tentar aceitar uma nova conexão com um cliente
+// módulo p/ aceitar uma nova conexão com um cliente
+
+void setupSHM(client_t *client, bool flag);
+// módulo p/ configurar o espaço de memória compartilhado
+
+bool checkGroup(client_t client);
+// módulo p/ verificar se o grupo do cliente existe
 
 void handleSIGINT(int signal);
-// função p/ tratar o sinal de interrupção (CTRL + C)
+// função p/ tratar o sinal de interrupção (SIGINT)
 
 void handleSIGCHLD(int signal);
 // função p/ tratar o SIGCHLD (quando um processo filho encerra)
 
 void handleSIGTERM(int signal);
-// função p/ tratar o sinal de encerramento de processo
+// função p/ tratar o sinal de encerramento de processo (SIGTERM)
 
 void gracefulShutdown(int context);
 // rotina de encerramento gracioso
@@ -88,9 +96,7 @@ int updateGroup(long secret, char action);
 // função p/ atualizar o contador dos grupos
 
 int main(int argc, char **argv){
-    char error[BUFFER_SIZE];
-    char path[32];
-    bool flag;
+// uso: ./server <port>
 
     // configura o tratamento de sinais...
     signal(SIGINT,  handleSIGINT);
@@ -105,26 +111,9 @@ int main(int argc, char **argv){
 
         client_t client = tryAccept(server);
 
-        updateGroup(client.secret, '+'); // atualiza o contador do grupo
+        updateGroup(client.secret, '+'); // atualiza o contador de membros no grupo
 
         printf("Conexão estabelecida com %s!\n", client.username);
-
-        // verifica se o grupo do cliente existe
-        flag = false;
-        for(int i = 0; i < secrets_qty; i++){
-            if(secrets[i] == client.secret){
-                flag = true;
-
-                break;
-            }
-        }
-        if(flag == false){
-        // se não existir, insere no array de grupos
-
-            secrets[secrets_qty] = client.secret;
-
-            secrets_qty++;
-        }
 
         pid_t pid = fork();
 
@@ -143,75 +132,8 @@ int main(int argc, char **argv){
             signal(SIGINT,  SIG_IGN);
             signal(SIGTERM, handleSIGTERM);
 
-            // inicia os espaços de memória compartilhados
-            sprintf(path, "./tmp/shm_%ld", client.secret);
-            FILE *f = fopen(path, "a");
-            if(f)fclose(f);
-
-            client.shm_key = ftok(path, PROJECT_ID);
-
-            sprintf(path, "./tmp/sem_%ld", client.secret);
-            f = fopen(path, "a");
-            if(f)fclose(f);
-
-            client.sem_key = ftok(path, PROJECT_ID);
-            
-            if(flag == false){
-            // é o processo que cria o segmento de memória compartilhado
-                
-                client.shm_id = shmget(client.shm_key, SHM_SIZE, IPC_CREAT | 0666);
-                if(client.shm_id < 0){
-                    FORMAT_ERROR(error, "Falha na criação do espaço de memória compartilhado: ");
-
-                    crashLanding(1, error);
-                }
-
-                client.sem_id = semget(client.sem_key, 1, IPC_CREAT | 0666);
-                if(client.sem_id < 0){
-                    FORMAT_ERROR(error, "Falha na criação do semáforo compartilhado: ");
-
-                    crashLanding(1, error);
-                }
-
-                union semun sem_attr;
-                sem_attr.val = 1;
-                if(semctl(client.sem_id, 0, SETVAL, sem_attr) == -1){
-                    FORMAT_ERROR(error, "Falha ao atribuir o valor inicial ao semáforo: ");
-
-                    crashLanding(1, error);
-                }
-
-                // insere a primeira mensagem no espaço de memória compartilhado
-                message_t tmp_msg;
-                resetMsg(&tmp_msg);
-
-                client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
-                if(client.shm_ptr == (message_t*) -1){
-                    FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
-
-                    crashLanding(1, error);
-                }
-
-                *client.shm_ptr = tmp_msg;
-
-                shmdt(client.shm_ptr); // libera o segmento de memória compartilhado
-            }else{
-            // é o processo que acessa o segmento de memória compartilhado
-
-                client.shm_id = shmget(client.shm_key, SHM_SIZE, 0666); // sem IPC_CREAT
-                if(client.shm_id < 0){
-                    FORMAT_ERROR(error, "Falha no acesso ao espaço de memória compartilhado: ");
-
-                    crashLanding(1, error);
-                }
-
-                client.sem_id = semget(client.sem_key, 1, 0666); // sem IPC_CREAT
-                if(client.sem_id < 0){
-                    FORMAT_ERROR(error, "Falha no acesso ao semáforo compartilhado: ");
-
-                    crashLanding(1, error);
-                }
-            }
+            // configura o espaço de memória compartilhado
+            setupSHM(&client, checkGroup(client));
             
             // lógica de comunicação
             #pragma omp parallel sections shared(running) firstprivate(client)
@@ -236,7 +158,7 @@ int main(int argc, char **argv){
                                             0);
                         if(rcvd <= 0){
                             if(rcvd == 0){
-                            // conexão perdida
+                            // a conexão foi perdida
 
                                 printf("Conexão perdida com o cliente.\n");
                             
@@ -259,7 +181,7 @@ int main(int argc, char **argv){
                         // lê a quantidade de membros no grupo
                         int qty = 0;
                         sprintf(path, "./tmp/qty_%ld", client.secret);
-                        f = fopen(path, "r");
+                        FILE *f = fopen(path, "r");
                         fscanf(f, "%d", &qty);
                         fclose(f);
 
@@ -282,8 +204,6 @@ int main(int argc, char **argv){
 
                             // lê a mensagem no espaço de memória compartilhado
                             aux_msg = *client.shm_ptr;
-                            printf("(in:shm_%ld:%s)\n", client.secret, client.username);
-                            debugMsg(aux_msg);
                             if(aux_msg.counter == -1){
                             // não há mensagem válida no espaço de memória compartilhado
                             
@@ -311,7 +231,7 @@ int main(int argc, char **argv){
                                 crashLanding(1, error);
                             }
 
-                            usleep(250000); // espera 250ms
+                            if(curr_qty < qty)usleep(250000); // espera 250ms antes da próx. tentativa
                         }
                     }
                 }
@@ -344,10 +264,8 @@ int main(int argc, char **argv){
                             crashLanding(1, error);
                         }
 
-                        // lê a memória compartilhada
+                        // lê a mensagem no espaço de memória compartilhado
                         message = *client.shm_ptr;
-                        printf("(out:shm_%ld:%s)\n", client.secret, client.username);
-                        debugMsg(message);
 
                         // verifica se a mensagem é válida
                         if(message.counter == -1){
@@ -362,9 +280,9 @@ int main(int argc, char **argv){
                                 crashLanding(1, error);
                             }
 
-                            usleep(250000); // espera 250ms
+                            usleep(250000); // espera 250ms antes da próx. tentativa
 
-                            continue; // não há mensagem válida disponível
+                            continue; // não há mensagem válida disponível...
                         }
 
                         // verifica se a mensagem é repetida
@@ -380,11 +298,11 @@ int main(int argc, char **argv){
                                 crashLanding(1, error);
                             }
 
-                            usleep(250000); // espera 250ms
+                            usleep(250000); // espera 250ms antes da próx. tentativa
 
-                            continue; // a mensagem é repetida
+                            continue; // a mensagem é repetida...
                         }else{
-                        // é uma nova mensagem
+                        // é uma nova mensagem!
                         
                             old_msg = message;
 
@@ -442,11 +360,10 @@ int main(int argc, char **argv){
 server_t setupComm(int argc, char **argv){
 // módulo p/ estabelecer conexão cliente-servidor
 
-    struct sockaddr_in server_addr;   // endereço do servidor
-    struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
+    struct sockaddr_in server_addr;
+    struct sockaddr *server_addr_ptr
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
-    char error[BUFFER_SIZE];
     server_t server;
 
     // verifica os parâmetros de inicialização
@@ -470,8 +387,8 @@ server_t setupComm(int argc, char **argv){
 
     // define o endereço de servidor...
     server_addr.sin_family = AF_INET;          // para protocolo IPv4,
-    server_addr.sin_addr.s_addr = INADDR_ANY;  // de qualquer origem
-    server_addr.sin_port = htons(server.port);
+    server_addr.sin_addr.s_addr = INADDR_ANY;  // de qualquer origem e
+    server_addr.sin_port = htons(server.port); // na porta escolhida
 
     // vincula...
     if(bind(server_fd,       // o file desciptor do soquete do servidor
@@ -499,16 +416,14 @@ server_t setupComm(int argc, char **argv){
 }
 
 client_t tryAccept(server_t server){
-// tentar aceitar uma nova conexão com um cliente
-
-    char error[BUFFER_SIZE];
+// módulo p/ aceitar uma nova conexão com um cliente
 
     while(running){
         client_fd = accept(server_fd,
                            server.server_addr_ptr,
                            &server.server_addr_len);
         if(client_fd < 0){
-            sleep(1); // espera 1s
+            sleep(1); // espera 1s antes da pŕox. tentativa
 
             continue;
         }
@@ -521,7 +436,7 @@ client_t tryAccept(server_t server){
                             0);
         if(rcvd <= 0){
             if(rcvd == 0){
-            // conexão perdida
+            // a conexão foi perdida
 
                 printf("Conexão perdida com o cliente.\n");
                             
@@ -537,8 +452,106 @@ client_t tryAccept(server_t server){
     }
 }
 
+void setupSHM(client_t *client, bool flag){
+// módulo p/ configurar o espaço de memória compartilhado
+
+    // inicia os espaços de memória compartilhados
+    sprintf(path, "./tmp/shm_%ld", client->secret);
+    FILE *f = fopen(path, "a");
+    if(f)fclose(f);
+
+    client->shm_key = ftok(path, PROJECT_ID);
+
+    sprintf(path, "./tmp/sem_%ld", client->secret);
+    f = fopen(path, "a");
+    if(f)fclose(f);
+
+    client->sem_key = ftok(path, PROJECT_ID);
+            
+    if(flag == false){
+    // é o processo que cria o segmento de memória compartilhado
+                
+        client->shm_id = shmget(client->shm_key, SHM_SIZE, IPC_CREAT | 0666);
+        if(client->shm_id < 0){
+            FORMAT_ERROR(error, "Falha na criação do espaço de memória compartilhado: ");
+
+            crashLanding(1, error);
+        }
+
+        client->sem_id = semget(client->sem_key, 1, IPC_CREAT | 0666);
+        if(client->sem_id < 0){
+            FORMAT_ERROR(error, "Falha na criação do semáforo compartilhado: ");
+
+            crashLanding(1, error);
+        }
+
+        union semun sem_attr;
+        sem_attr.val = 1;
+        if(semctl(client->sem_id, 0, SETVAL, sem_attr) == -1){
+            FORMAT_ERROR(error, "Falha ao atribuir o valor inicial ao semáforo: ");
+
+            crashLanding(1, error);
+        }
+
+        // insere a primeira mensagem no espaço de memória compartilhado
+        message_t tmp_msg;
+        resetMsg(&tmp_msg);
+
+        client->shm_ptr = (message_t*) shmat(client->shm_id, NULL, 0);
+        if(client->shm_ptr == (message_t*) -1){
+            FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
+
+            crashLanding(1, error);
+        }
+
+        *client->shm_ptr = tmp_msg;
+
+        shmdt(client->shm_ptr); // libera o segmento de memória compartilhado
+    }else{
+    // é o processo que acessa o segmento de memória compartilhado
+
+        client->shm_id = shmget(client->shm_key, SHM_SIZE, 0666); // sem IPC_CREAT
+        if(client->shm_id < 0){
+            FORMAT_ERROR(error, "Falha no acesso ao espaço de memória compartilhado: ");
+
+            crashLanding(1, error);
+        }
+
+        client->sem_id = semget(client->sem_key, 1, 0666); // sem IPC_CREAT
+        if(client->sem_id < 0){
+            FORMAT_ERROR(error, "Falha no acesso ao semáforo compartilhado: ");
+
+            crashLanding(1, error);
+        }
+    }
+}
+
+bool checkGroup(client_t client){
+// módulo p/ verificar se o grupo do cliente existe
+
+    bool flag = false;
+
+    // percorre o array de grupos e verifica se o segredo existe
+    for(int i = 0; i < secrets_qty; i++){
+        if(secrets[i] == client.secret){
+            flag = true;
+
+            break;
+        }
+    }
+    if(flag == false){
+    // se não existir, insere no array de grupos
+
+        secrets[secrets_qty] = client.secret;
+
+        secrets_qty++;
+    }
+
+    return flag;
+}
+
 void handleSIGINT(int signal){
-// função p/ tratar o sinal de interrupção (CTRL + C)
+// função p/ tratar o sinal de interrupção (SIGINT)
 
     printf("\nSinal de interrupção recebido.\n"
            "\nEncerrando aplicação...\n");
@@ -571,12 +584,6 @@ void handleSIGCHLD(int signal){
 
                 flag = updateGroup(client.secret, '-'); // atualiza o contador do grupo
 
-                /*flag = false;
-                for(int j = 0; j < children_qty; j++){
-                    if(children[j].secret == client.secret){
-                        flag = true;
-                    }
-                }*/
                 if(flag == 1){
                 // se não houver outros membros no grupo
 
@@ -594,7 +601,7 @@ void handleSIGCHLD(int signal){
 }
 
 void handleSIGTERM(int signal){
-// função p/ tratar o sinal de encerramento de processo
+// função p/ tratar o sinal de encerramento de processo (SIGTERM)
 
     printf("\n(%d) Sinal de término recebido.\n"
            "Encerrando processo filho...\n", getpid()); // no contexto do processo filho
@@ -654,14 +661,10 @@ void crashLanding(int context, char *error){
 
             break;
     }
-    
-    exit(EXIT_FAILURE);
 }
 
 void killOffspring(){
 // função p/ matar os processos filhos
-
-    char error[BUFFER_SIZE];
 
     for(int i = 0; i < children_qty; i++){
         if(kill(children[i].pid, SIGTERM) == -1){
@@ -678,7 +681,6 @@ int updateGroup(long secret, char action){
 // função p/ atualizar o contador dos grupos
 
     FILE *f;
-    char path[64];
     int qty;
 
     sprintf(path, "./tmp/qty_%ld", secret);

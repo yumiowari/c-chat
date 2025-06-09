@@ -12,7 +12,7 @@ struct message {
     char username[16];
     long secret;
     char buffer[1024];
-    int counter;
+    int counter; // quando -1, indica que a mensagem é inválida
 }typedef(message_t);
 
 struct client{
@@ -35,10 +35,13 @@ struct client{
  *  Assinaturas
  */
 bool checkClientArgs(int argc, char **argv);
-// função p/ verificar os parâmetros de entrada
+// função p/ verificar os parâmetros de inicialização
 
 bool compareMsg(message_t A, message_t B);
 // função p/ verificar se A == B
+// retorna...
+//     true - se as mensagens forem iguais
+//     false - se as mensagens forem diferentes
 
 void debugMsg(message_t msg);
 // função p/ imprimir os atributos da mensagem

@@ -23,12 +23,11 @@
 #include <omp.h>        // OpenMP
 #include <string.h>     // strcmp()
 #include <signal.h>     // signal()
-#include <stdatomic.h>  // atomic_bool typedef
 #include <sys/select.h> // select()
 #include <errno.h>      // nº do último erro
 #include <unistd.h>     // close()
 
-#include "client_utils.h" // client_t
+#include "client_utils.h" // client_t, message_t
 
 /*
  *  Definições
@@ -45,8 +44,9 @@
 /*
  *  Variáveis Globais
  */
-int client_fd;
+int client_fd; // descritor de arquivo do soquete
 bool running = true;
+char error[BUFFER_SIZE];
 
 /*
  *  Assinaturas
@@ -55,7 +55,7 @@ client_t setupComm(int argc, char **argv);
 // módulo p/ estabelecer conexão cliente-servidor
 
 void handleSIGINT(int signal);
-// função p/ tratar o sinal de interrupção (CTRL + C)
+// função p/ tratar o sinal de interrupção (SIGINT)
 
 void gracefulShutdown();
 // rotina de encerramento gracioso
@@ -64,7 +64,7 @@ void crashLanding(char *error);
 // rotina de encerramento em caso de falha
 
 int main(int argc, char **argv){
-    char error[BUFFER_SIZE];
+// uso: ./client <username> <secret> <port>
 
     // configura o tratamento de sinais...
     signal(SIGINT, handleSIGINT);
@@ -84,10 +84,7 @@ int main(int argc, char **argv){
             // recebe mensagens do servidor
 
                 message_t message;
-                memset(message.buffer, 0, 1024);
-                memset(message.username, 0, 16);
-                message.secret = -1;
-                message.counter = -1;
+                resetMsg(&message);
 
                 ssize_t rcvd = recv(client_fd,
                                     &message,
@@ -137,9 +134,7 @@ int main(int argc, char **argv){
             // envia mensagens ao servidor
 
                 message_t message;
-                memset(message.buffer, 0, 1024);
-                memset(message.username, 0, 16);
-                message.secret = -1;
+                resetMsg(&message);
 
                 FD_ZERO(&fds);              // "limpa" o conjunto de descritores de arquivo
                 FD_SET(STDIN_FILENO, &fds); // e adiciona o descritor de stdin
@@ -186,13 +181,11 @@ int main(int argc, char **argv){
 client_t setupComm(int argc, char **argv){
 // módulo p/ estabelecer conexão cliente-servidor
 
-    struct sockaddr_in server_addr;   // endereço do servidor
-    struct sockaddr *server_addr_ptr  // ponteiro genérico p/ o endereço do servidor
+    struct sockaddr_in server_addr;
+    struct sockaddr *server_addr_ptr
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
-    char error[BUFFER_SIZE];
     client_t client;
-    int port;
 
     // verifica os parâmetros de inicialização
     if(checkClientArgs(argc, argv) == false){
@@ -200,7 +193,7 @@ client_t setupComm(int argc, char **argv){
 
         crashLanding(error);
     }
-    port = atoi(argv[3]);
+    int port = atoi(argv[3]);
 
     // define as informações de cliente
     strcpy(client.username, argv[1]);
@@ -252,7 +245,7 @@ client_t setupComm(int argc, char **argv){
 }
 
 void handleSIGINT(int signal){
-// função p/ tratar o sinal de interrupção (CTRL + C)
+// função p/ tratar o sinal de interrupção (SIGINT)
 
     printf("\nSinal de interrupção recebido.\n"
            "\nEncerrando aplicação...\n");
@@ -278,6 +271,4 @@ void crashLanding(char *error){
     fprintf(stderr, "Fim abrupto da aplicação.\n");
 
     gracefulShutdown();
-
-    exit(EXIT_FAILURE);
 }

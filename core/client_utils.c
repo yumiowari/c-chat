@@ -8,7 +8,7 @@
  *  Funções
  */
 bool checkClientArgs(int argc, char **argv){
-// função p/ verificar os parâmetros de entrada
+// função p/ verificar os parâmetros de inicialização
 
     bool flag = true;
 
@@ -53,7 +53,7 @@ bool checkClientArgs(int argc, char **argv){
         }
 
         if(flag == true){
-            // verifica o segredo
+            // verifica a porta
             for(int i = 0; i < strlen(argv[3]); i++){
                 if(argv[3][i] < '0' || argv[3][i] > '9'){
                     fprintf(stderr, "A porta deve ser um número inteiro.\n");
