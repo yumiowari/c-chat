@@ -123,6 +123,9 @@ int main(int argc, char **argv){
         {
         // saída
 
+            message_t old_msg;
+            resetMsg(&old_msg);
+
             char buffer[BUFFER_SIZE];
             fd_set fds; // conjunto de file descriptors
 
@@ -144,6 +147,7 @@ int main(int argc, char **argv){
                 int ready = select(STDIN_FILENO + 1, &fds, NULL, NULL, &timeout);
 
                 if(ready > 0){
+                // está pronto para ler a entrada padrão
 
                     #pragma omp critical
                     {
@@ -155,14 +159,20 @@ int main(int argc, char **argv){
                             message.secret = client.secret;
                             message.counter = 1; // conceitualmente, o remetente já leu a mensagem
 
-                            ssize_t sent = send(client_fd,
-                                                &message,
-                                                sizeof(message_t),
-                                                0);
-                            if(sent < 0){ // em caso de erro, send() retorna -1
-                                FORMAT_ERROR(error, "Falha no envio da mensagem ao servidor: ");
-                                                    
-                                crashLanding(error);
+                            if(!compareMsg(message, old_msg)){
+                            // o envio da mensagem ocorre somente se não for repetida
+                            
+                                old_msg = message;
+
+                                ssize_t sent = send(client_fd,
+                                                    &message,
+                                                    sizeof(message_t),
+                                                    0);
+                                if(sent < 0){ // em caso de erro, send() retorna -1
+                                    FORMAT_ERROR(error, "Falha no envio da mensagem ao servidor: ");
+                                                        
+                                    crashLanding(error);
+                                }
                             }
                         }
                     }
