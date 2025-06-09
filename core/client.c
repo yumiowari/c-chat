@@ -46,7 +46,6 @@
  */
 int client_fd; // descritor de arquivo do soquete
 bool running = true;
-char error[BUFFER_SIZE];
 
 /*
  *  Assinaturas
@@ -65,6 +64,8 @@ void crashLanding(char *error);
 
 int main(int argc, char **argv){
 // uso: ./client <username> <secret> <port>
+
+    char error[BUFFER_SIZE];
 
     // configura o tratamento de sinais...
     signal(SIGINT, handleSIGINT);
@@ -180,6 +181,8 @@ int main(int argc, char **argv){
  */
 client_t setupComm(int argc, char **argv){
 // módulo p/ estabelecer conexão cliente-servidor
+
+    char error[BUFFER_SIZE];
 
     struct sockaddr_in server_addr;
     struct sockaddr *server_addr_ptr

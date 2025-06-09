@@ -56,8 +56,6 @@ client_t children[MAX_CHILDREN]; // array de processos filhos (clientes)
 int children_qty = 0;            // contador de filhos (solução temporária)
 int secrets[MAX_CHILDREN]; // array de secrets
 int secrets_qty = 0;       // contador de secrets
-char error[BUFFER_SIZE];
-char path[64];
 
 /*
  *  Assinaturas
@@ -97,6 +95,9 @@ int updateGroup(long secret, char action);
 
 int main(int argc, char **argv){
 // uso: ./server <port>
+
+    char error[BUFFER_SIZE];
+    char path[64];
 
     // configura o tratamento de sinais...
     signal(SIGINT,  handleSIGINT);
@@ -308,6 +309,7 @@ int main(int argc, char **argv){
 
                             // somente se a mensagem for de outro membro do grupo...
                             if(strcmp(message.username, client.username) != 0){
+
                                 // atualiza o contador da mensagem
                                 message.counter++;
                                 *client.shm_ptr = message;
@@ -359,6 +361,8 @@ int main(int argc, char **argv){
  */
 server_t setupComm(int argc, char **argv){
 // módulo p/ estabelecer conexão cliente-servidor
+
+    char error[BUFFER_SIZE];
 
     struct sockaddr_in server_addr;
     struct sockaddr *server_addr_ptr
@@ -418,6 +422,8 @@ server_t setupComm(int argc, char **argv){
 client_t tryAccept(server_t server){
 // módulo p/ aceitar uma nova conexão com um cliente
 
+    char error[BUFFER_SIZE];
+
     while(running){
         client_fd = accept(server_fd,
                            server.server_addr_ptr,
@@ -454,6 +460,9 @@ client_t tryAccept(server_t server){
 
 void setupSHM(client_t *client, bool flag){
 // módulo p/ configurar o espaço de memória compartilhado
+
+    char error[BUFFER_SIZE];
+    char path[64];
 
     // inicia os espaços de memória compartilhados
     sprintf(path, "./tmp/shm_%ld", client->secret);
@@ -666,6 +675,8 @@ void crashLanding(int context, char *error){
 void killOffspring(){
 // função p/ matar os processos filhos
 
+    char error[BUFFER_SIZE];
+
     for(int i = 0; i < children_qty; i++){
         if(kill(children[i].pid, SIGTERM) == -1){
             FORMAT_ERROR(error, "Falha ao enviar SIGTERM para o processo filho: ");
@@ -683,10 +694,14 @@ int updateGroup(long secret, char action){
     FILE *f;
     int qty;
 
+    char path[64];
+
     sprintf(path, "./tmp/qty_%ld", secret);
 
     switch(action){
         case '+':
+        // incrementa...
+
             f = fopen(path, "r");
             if(f == NULL){
             // é o primeiro membro do grupo
@@ -711,6 +726,8 @@ int updateGroup(long secret, char action){
             break;
 
         case '-':
+        // decrementa...
+
             f = fopen(path, "r");
             fscanf(f, "%d", &qty);
             fclose(f);
