@@ -11,7 +11,7 @@ Sistema de chatting cliente-servidor em C.
 
 ## Sobre
 
-O projeto de desenvolvimento __C-Chat__ constitui da elaboração de um sistema de chatting cliente-servidor para a linguagem C, com comunicação simultânea de muitos usuários e orquestração por multiprocessamento em uma máquina servidora principal, que pode ser hospedada em serviços de nuvem.
+O projeto de desenvolvimento __C-Chat__ constitui da elaboração de um sistema de chat cliente-servidor para a linguagem C, com comunicação simultânea de muitos usuários e orquestração por multiprocessamento em uma máquina servidora principal, que pode ser hospedada em serviços de nuvem.
 
 ## Compilação
 
@@ -23,7 +23,7 @@ O projeto de desenvolvimento __C-Chat__ constitui da elaboração de um sistema 
 
 `gcc server.c client_utils.o server_utils.o -o server -fopenmp`
 
-> Ou execute o script de compilação: `script.sh`.
+> Ou execute o script de compilação: `compile.sh`.
 
 ## Execução
 
@@ -32,8 +32,6 @@ Altere `SERVER_IP` em `client.c` para o endereço IPv4 da máquina servidora.
 Execute `./server <port>` para iniciar o servidor.
 
 Execute `./client <username> <secret> <port>` para iniciar o cliente.
-
-Libere a porta no Firewall para entrada/saída de dados nas máquinas.
 
 ## Compatibilidade
 
