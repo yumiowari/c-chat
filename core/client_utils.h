@@ -1,6 +1,9 @@
 #ifndef CLIENT_UTILS_H
 #define CLIENT_UTILS_H
 
+/*
+ *  Bibliotecas
+ */
 #include <stdbool.h>   // bool type
 #include <sys/types.h> // pid_t
 #include <sys/ipc.h>   // key_t
