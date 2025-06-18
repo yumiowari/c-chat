@@ -24,14 +24,13 @@
 #include <string.h>     // memset()
 #include <signal.h>     // signal()
 #include <wait.h>       // waitpid()
-#include <stdatomic.h>  // atomic_bool typedef
 #include <errno.h>      // nº do último erro
 #include <sys/ipc.h>    // ftok()
 #include <sys/shm.h>    // shared memory
 #include <sys/sem.h>    // semaphore
 
-#include "server_utils.h" // server_t
-#include "client_utils.h" // client_t, sem_wait(), sem_open()
+#include "server_utils.h" // server_t, sem_wait(), sem_open()
+#include "client_utils.h" // client_t, message_t
 
 /*
  *  Definições
@@ -49,11 +48,12 @@
 /*
  *  Variáveis Globais
  */
+// descritores de arquivo dos soquetes
 int server_fd,
     client_fd;
 bool running = true;
 client_t children[MAX_CHILDREN]; // array de processos filhos (clientes)
-int children_qty = 0;                 // contador de filhos (solução temporária)
+int children_qty = 0;            // contador de filhos (solução temporária)
 int secrets[MAX_CHILDREN]; // array de secrets
 int secrets_qty = 0;       // contador de secrets
 
@@ -64,16 +64,22 @@ server_t setupComm(int argc, char **argv);
 // módulo p/ estabelecer conexão cliente-servidor
 
 client_t tryAccept(server_t server);
-// tentar aceitar uma nova conexão com um cliente
+// módulo p/ aceitar uma nova conexão com um cliente
+
+void setupSHM(client_t *client, bool flag);
+// módulo p/ configurar o espaço de memória compartilhado
+
+bool checkGroup(client_t client);
+// módulo p/ verificar se o grupo do cliente existe
 
 void handleSIGINT(int signal);
-// função p/ tratar o sinal de interrupção (CTRL + C)
+// função p/ tratar o sinal de interrupção (SIGINT)
 
 void handleSIGCHLD(int signal);
 // função p/ tratar o SIGCHLD (quando um processo filho encerra)
 
 void handleSIGTERM(int signal);
-// função p/ tratar o sinal de encerramento de processo
+// função p/ tratar o sinal de encerramento de processo (SIGTERM)
 
 void gracefulShutdown(int context);
 // rotina de encerramento gracioso
@@ -84,10 +90,14 @@ void crashLanding(int context, char *error);
 void killOffspring();
 // função p/ matar os processos filhos
 
+int updateGroup(long secret, char action);
+// função p/ atualizar o contador dos grupos
+
 int main(int argc, char **argv){
+// uso: ./server <port>
+
     char error[BUFFER_SIZE];
-    char path[32];
-    bool flag;
+    char path[64];
 
     // configura o tratamento de sinais...
     signal(SIGINT,  handleSIGINT);
@@ -102,24 +112,9 @@ int main(int argc, char **argv){
 
         client_t client = tryAccept(server);
 
+        updateGroup(client.secret, '+'); // atualiza o contador de membros no grupo
+
         printf("Conexão estabelecida com %s!\n", client.username);
-
-        // verifica se o grupo do cliente existe
-        flag = false;
-        for(int i = 0; i < secrets_qty; i++){
-            if(secrets[i] == client.secret){
-                flag = true;
-
-                break;
-            }
-        }
-        if(flag == false){
-        // se não existir, insere no array de grupos
-
-            secrets[secrets_qty] = client.secret;
-
-            secrets_qty++;
-        }
 
         pid_t pid = fork();
 
@@ -138,60 +133,8 @@ int main(int argc, char **argv){
             signal(SIGINT,  SIG_IGN);
             signal(SIGTERM, handleSIGTERM);
 
-            // inicia os espaços de memória compartilhados
-            sprintf(path, "./tmp/shm_%ld", client.secret);
-            FILE *f = fopen(path, "a");
-            if(f)fclose(f);
-
-            client.shm_key = ftok(path, PROJECT_ID);
-
-            sprintf(path, "./tmp/sem_%ld", client.secret);
-            f = fopen(path, "a");
-            if(f)fclose(f);
-
-            client.sem_key = ftok(path, PROJECT_ID);
-            
-            if(flag == false){
-            // é o processo que cria o segmento de memória compartilhado
-                
-                client.shm_id = shmget(client.shm_key, SHM_SIZE, IPC_CREAT | 0666);
-                if(client.shm_id < 0){
-                    FORMAT_ERROR(error, "Falha na criação do espaço de memória compartilhado: ");
-
-                    crashLanding(1, error);
-                }
-
-                client.sem_id = semget(client.sem_key, 1, IPC_CREAT | 0666);
-                if(client.sem_id < 0){
-                    FORMAT_ERROR(error, "Falha na criação do semáforo compartilhado: ");
-
-                    crashLanding(1, error);
-                }
-
-                union semun sem_attr;
-                sem_attr.val = 1;
-                if(semctl(client.sem_id, 0, SETVAL, sem_attr) == -1){
-                    FORMAT_ERROR(error, "Falha ao atribuir o valor inicial ao semáforo: ");
-
-                    crashLanding(1, error);
-                }
-            }else{
-            // é o processo que acessa o segmento de memória compartilhado
-
-                client.shm_id = shmget(client.shm_key, SHM_SIZE, 0666); // sem IPC_CREAT
-                if(client.shm_id < 0){
-                    FORMAT_ERROR(error, "Falha no acesso ao espaço de memória compartilhado: ");
-
-                    crashLanding(1, error);
-                }
-
-                client.sem_id = semget(client.sem_key, 1, 0666); // sem IPC_CREAT
-                if(client.sem_id < 0){
-                    FORMAT_ERROR(error, "Falha no acesso ao semáforo compartilhado: ");
-
-                    crashLanding(1, error);
-                }
-            }
+            // configura o espaço de memória compartilhado
+            setupSHM(&client, checkGroup(client));
             
             // lógica de comunicação
             #pragma omp parallel sections shared(running) firstprivate(client)
@@ -204,9 +147,10 @@ int main(int argc, char **argv){
                     // recebe mensagens do cliente e encaminha para os outros membros do grupo
 
                         message_t message;
-                        memset(message.buffer, 0, 1024);
-                        memset(message.username, 0, 16);
-                        message.secret = -1;
+                        resetMsg(&message);
+
+                        message_t aux_msg;
+                        resetMsg(&aux_msg);
 
                         // recebe a mensagem do cliente
                         ssize_t rcvd = recv(client_fd,
@@ -215,7 +159,7 @@ int main(int argc, char **argv){
                                             0);
                         if(rcvd <= 0){
                             if(rcvd == 0){
-                            // conexão perdida
+                            // a conexão foi perdida
 
                                 printf("Conexão perdida com o cliente.\n");
                             
@@ -235,88 +179,50 @@ int main(int argc, char **argv){
                                                     message.buffer);
                         }
 
-                        // entra na seção crítica
-                        if(sem_wait(client.sem_id) == false){
-                            FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
+                        // lê a quantidade de membros no grupo
+                        int qty = 0;
+                        sprintf(path, "./tmp/qty_%ld", client.secret);
+                        FILE *f = fopen(path, "r");
+                        fscanf(f, "%d", &qty);
+                        fclose(f);
 
-                            crashLanding(1, error);
-                        }
-
-                        // encaminha a mensagem para os outros membros do grupo
-                        client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
-                        if(client.shm_ptr == (message_t*) -1){
-                            FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
-
-                            crashLanding(1, error);
-                        }
-
-                        // escreve na memória compartilhada
-                        *client.shm_ptr = message;
-
-                        shmdt(client.shm_ptr); // libera o segmento de memória compartilhado
-
-                        // sai da seção crítica
-                        if(sem_open(client.sem_id) == false){
-                            FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
-
-                            crashLanding(1, error);
-                        }
-                    }
-                }
-
-                #pragma omp section
-                {
-                // saída
-
-                    message_t old_msg;
-
-                    while(running){
-                    // lê mensagens dos outros membros do grupo e encaminha para o cliente
-
-                        message_t message;
-                        memset(message.buffer, 0, 1024);
-                        memset(message.username, 0, 16);
-                        message.secret = -1;
-
-                        // entra na seção crítica
-                        if(sem_wait(client.sem_id) == false){
-                            FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
-
-                            crashLanding(1, error);
-                        }
-
-                        // recebe a mensagem de outro membro do grupo
-                        client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
-                        if(client.shm_ptr == (message_t*) -1){
-                            FORMAT_ERROR(error, "Falha ao acessar o segmento de memória compartilhado: ");
-
-                            crashLanding(1, error);
-                        }
-
-                        // lê a memória compartilhada
-                        message = *client.shm_ptr;
-
-                        // verifica o buffer da mensagem
-                        if(strlen(message.buffer) == 0){
-
-                            shmdt(client.shm_ptr);
-
-                            if(sem_open(client.sem_id) == false){
-                                FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+                        int curr_qty = -1;
+                        while(curr_qty < qty){
+                            // entra na seção crítica
+                            if(sem_wait(client.sem_id) == false){
+                                FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
 
                                 crashLanding(1, error);
                             }
 
-                            usleep(100000); // espera 100ms
+                            // acessa o espaço de memória compartilhado
+                            client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
+                            if(client.shm_ptr == (message_t*) -1){
+                                FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
 
-                            continue; // não há mensagem válida disponível
-                        }
+                                crashLanding(1, error);
+                            }
 
-                        // compara o buffer lido com o buffer antigo
-                        if(strlen(old_msg.buffer) > 0                  &&
-                           strcmp(old_msg.buffer, message.buffer) == 0 &&
-                           strcmp(old_msg.username, message.username) == 0){
+                            // lê a mensagem no espaço de memória compartilhado
+                            aux_msg = *client.shm_ptr;
+                            if(aux_msg.counter == -1){
+                            // não há mensagem válida no espaço de memória compartilhado
+                            
+                                qty = -1;
 
+                                // escreve a nova mensagem na memória compartilhada
+                                *client.shm_ptr = message;
+                            }else{
+                                curr_qty = aux_msg.counter;
+
+                                // somente se todos os membros do grupo receberam a mensagem...
+                                if(curr_qty == qty){
+                                    // substitui a mensagem na memória compartilhada
+                                    *client.shm_ptr = message;
+                                }
+                            }
+
+                            // libera o segmento de memória compartilhado
                             shmdt(client.shm_ptr);
 
                             // sai da seção crítica
@@ -326,13 +232,91 @@ int main(int argc, char **argv){
                                 crashLanding(1, error);
                             }
 
-                            usleep(100000); // espera 100ms
+                            if(curr_qty < qty)usleep(250000); // espera 250ms antes da próx. tentativa
+                        }
+                    }
+                }
 
-                            continue; // é uma mensagem repetida
-                        }else{
-                            old_msg = message;
+                #pragma omp section
+                {
+                // saída
+
+                    message_t old_msg;
+                    resetMsg(&old_msg);
+
+                    while(running){
+                    // lê mensagens dos outros membros do grupo e encaminha para o cliente
+
+                        message_t message;
+                        resetMsg(&message);
+
+                        // entra na seção crítica
+                        if(sem_wait(client.sem_id) == false){
+                            FORMAT_ERROR(error, "Falha ao entrar na seção crítica: ");
+
+                            crashLanding(1, error);
                         }
 
+                        // acessa o espaço de memória compartilhado
+                        client.shm_ptr = (message_t*) shmat(client.shm_id, NULL, 0);
+                        if(client.shm_ptr == (message_t*) -1){
+                            FORMAT_ERROR(error, "Falha ao acessar o segmento de memória compartilhado: ");
+
+                            crashLanding(1, error);
+                        }
+
+                        // lê a mensagem no espaço de memória compartilhado
+                        message = *client.shm_ptr;
+
+                        // verifica se a mensagem é válida
+                        if(message.counter == -1){
+
+                            // libera o segmento de memória compartilhado
+                            shmdt(client.shm_ptr);
+
+                            // sai da seção crítica
+                            if(sem_open(client.sem_id) == false){
+                                FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+
+                                crashLanding(1, error);
+                            }
+
+                            usleep(250000); // espera 250ms antes da próx. tentativa
+
+                            continue; // não há mensagem válida disponível...
+                        }
+
+                        // verifica se a mensagem é repetida
+                        if(compareMsg(message, old_msg)){
+
+                            // libera o segmento de memória compartilhado
+                            shmdt(client.shm_ptr);
+
+                            // sai da seção crítica
+                            if(sem_open(client.sem_id) == false){
+                                FORMAT_ERROR(error, "Falha ao sair da seção crítica: ");
+
+                                crashLanding(1, error);
+                            }
+
+                            usleep(250000); // espera 250ms antes da próx. tentativa
+
+                            continue; // a mensagem é repetida...
+                        }else{
+                        // é uma nova mensagem!
+                        
+                            old_msg = message;
+
+                            // somente se a mensagem for de outro membro do grupo...
+                            if(strcmp(message.username, client.username) != 0){
+
+                                // atualiza o contador da mensagem
+                                message.counter++;
+                                *client.shm_ptr = message;
+                            }
+                        }
+
+                        // libera o segmento de memória compartilhado
                         shmdt(client.shm_ptr);
 
                         // sai da seção crítica
@@ -365,7 +349,6 @@ int main(int argc, char **argv){
             // insere o cliente no array de processos filhos
             client.pid = pid;
             children[children_qty] = client;
-
             children_qty++;
         }
     }
@@ -379,11 +362,12 @@ int main(int argc, char **argv){
 server_t setupComm(int argc, char **argv){
 // módulo p/ estabelecer conexão cliente-servidor
 
-    struct sockaddr_in server_addr;   // endereço do servidor
-    struct sockaddr *server_addr_ptr  // ponteiro genérico para o endereço do servidor
+    char error[BUFFER_SIZE];
+
+    struct sockaddr_in server_addr;
+    struct sockaddr *server_addr_ptr
     = (struct sockaddr*)&server_addr;
     socklen_t server_addr_len = sizeof(server_addr);
-    char error[BUFFER_SIZE];
     server_t server;
 
     // verifica os parâmetros de inicialização
@@ -407,8 +391,8 @@ server_t setupComm(int argc, char **argv){
 
     // define o endereço de servidor...
     server_addr.sin_family = AF_INET;          // para protocolo IPv4,
-    server_addr.sin_addr.s_addr = INADDR_ANY;  // de qualquer origem
-    server_addr.sin_port = htons(server.port);
+    server_addr.sin_addr.s_addr = INADDR_ANY;  // de qualquer origem e
+    server_addr.sin_port = htons(server.port); // na porta escolhida
 
     // vincula...
     if(bind(server_fd,       // o file desciptor do soquete do servidor
@@ -436,7 +420,7 @@ server_t setupComm(int argc, char **argv){
 }
 
 client_t tryAccept(server_t server){
-// tentar aceitar uma nova conexão com um cliente
+// módulo p/ aceitar uma nova conexão com um cliente
 
     char error[BUFFER_SIZE];
 
@@ -445,7 +429,7 @@ client_t tryAccept(server_t server){
                            server.server_addr_ptr,
                            &server.server_addr_len);
         if(client_fd < 0){
-            sleep(1); // espera 1s
+            sleep(1); // espera 1s antes da pŕox. tentativa
 
             continue;
         }
@@ -458,7 +442,7 @@ client_t tryAccept(server_t server){
                             0);
         if(rcvd <= 0){
             if(rcvd == 0){
-            // conexão perdida
+            // a conexão foi perdida
 
                 printf("Conexão perdida com o cliente.\n");
                             
@@ -474,8 +458,109 @@ client_t tryAccept(server_t server){
     }
 }
 
+void setupSHM(client_t *client, bool flag){
+// módulo p/ configurar o espaço de memória compartilhado
+
+    char error[BUFFER_SIZE];
+    char path[64];
+
+    // inicia os espaços de memória compartilhados
+    sprintf(path, "./tmp/shm_%ld", client->secret);
+    FILE *f = fopen(path, "a");
+    if(f)fclose(f);
+
+    client->shm_key = ftok(path, PROJECT_ID);
+
+    sprintf(path, "./tmp/sem_%ld", client->secret);
+    f = fopen(path, "a");
+    if(f)fclose(f);
+
+    client->sem_key = ftok(path, PROJECT_ID);
+            
+    if(flag == false){
+    // é o processo que cria o segmento de memória compartilhado
+                
+        client->shm_id = shmget(client->shm_key, SHM_SIZE, IPC_CREAT | 0666);
+        if(client->shm_id < 0){
+            FORMAT_ERROR(error, "Falha na criação do espaço de memória compartilhado: ");
+
+            crashLanding(1, error);
+        }
+
+        client->sem_id = semget(client->sem_key, 1, IPC_CREAT | 0666);
+        if(client->sem_id < 0){
+            FORMAT_ERROR(error, "Falha na criação do semáforo compartilhado: ");
+
+            crashLanding(1, error);
+        }
+
+        union semun sem_attr;
+        sem_attr.val = 1;
+        if(semctl(client->sem_id, 0, SETVAL, sem_attr) == -1){
+            FORMAT_ERROR(error, "Falha ao atribuir o valor inicial ao semáforo: ");
+
+            crashLanding(1, error);
+        }
+
+        // insere a primeira mensagem no espaço de memória compartilhado
+        message_t tmp_msg;
+        resetMsg(&tmp_msg);
+
+        client->shm_ptr = (message_t*) shmat(client->shm_id, NULL, 0);
+        if(client->shm_ptr == (message_t*) -1){
+            FORMAT_ERROR(error, "Falha ao anexar o segmento de memória compartilhado: ");
+
+            crashLanding(1, error);
+        }
+
+        *client->shm_ptr = tmp_msg;
+
+        shmdt(client->shm_ptr); // libera o segmento de memória compartilhado
+    }else{
+    // é o processo que acessa o segmento de memória compartilhado
+
+        client->shm_id = shmget(client->shm_key, SHM_SIZE, 0666); // sem IPC_CREAT
+        if(client->shm_id < 0){
+            FORMAT_ERROR(error, "Falha no acesso ao espaço de memória compartilhado: ");
+
+            crashLanding(1, error);
+        }
+
+        client->sem_id = semget(client->sem_key, 1, 0666); // sem IPC_CREAT
+        if(client->sem_id < 0){
+            FORMAT_ERROR(error, "Falha no acesso ao semáforo compartilhado: ");
+
+            crashLanding(1, error);
+        }
+    }
+}
+
+bool checkGroup(client_t client){
+// módulo p/ verificar se o grupo do cliente existe
+
+    bool flag = false;
+
+    // percorre o array de grupos e verifica se o segredo existe
+    for(int i = 0; i < secrets_qty; i++){
+        if(secrets[i] == client.secret){
+            flag = true;
+
+            break;
+        }
+    }
+    if(flag == false){
+    // se não existir, insere no array de grupos
+
+        secrets[secrets_qty] = client.secret;
+
+        secrets_qty++;
+    }
+
+    return flag;
+}
+
 void handleSIGINT(int signal){
-// função p/ tratar o sinal de interrupção (CTRL + C)
+// função p/ tratar o sinal de interrupção (SIGINT)
 
     printf("\nSinal de interrupção recebido.\n"
            "\nEncerrando aplicação...\n");
@@ -490,7 +575,7 @@ void handleSIGCHLD(int signal){
 
     int status;
     pid_t pid;
-    bool flag;
+    int flag;
     client_t client;
 
     while((pid = waitpid(-1, &status, WNOHANG)) > 0){
@@ -506,13 +591,9 @@ void handleSIGCHLD(int signal){
 
                 children_qty--;
 
-                flag = false;
-                for(int j = 0; j < children_qty; j++){
-                    if(children[j].secret == client.secret){
-                        flag = true;
-                    }
-                }
-                if(flag == false){
+                flag = updateGroup(client.secret, '-'); // atualiza o contador do grupo
+
+                if(flag == 1){
                 // se não houver outros membros no grupo
 
                     // remove o segredo do array
@@ -529,7 +610,7 @@ void handleSIGCHLD(int signal){
 }
 
 void handleSIGTERM(int signal){
-// função p/ tratar o sinal de encerramento de processo
+// função p/ tratar o sinal de encerramento de processo (SIGTERM)
 
     printf("\n(%d) Sinal de término recebido.\n"
            "Encerrando processo filho...\n", getpid()); // no contexto do processo filho
@@ -548,7 +629,7 @@ void gracefulShutdown(int context){
 
             running = false; // encerra os laços de repetição
             killOffspring();
-            while(children_qty > 0); // espera encerrar todos os processos filhos
+            while(children_qty > 0); // espera todos os processos filhos encerrarem
             close(server_fd);
 
             break;
@@ -589,8 +670,6 @@ void crashLanding(int context, char *error){
 
             break;
     }
-    
-    exit(EXIT_FAILURE);
 }
 
 void killOffspring(){
@@ -606,5 +685,68 @@ void killOffspring(){
         }else{
             printf("Encerrando processo filho %d...\n", children[i].pid);
         }
+    }
+}
+
+int updateGroup(long secret, char action){
+// função p/ atualizar o contador dos grupos
+
+    FILE *f;
+    int qty;
+
+    char path[64];
+
+    sprintf(path, "./tmp/qty_%ld", secret);
+
+    switch(action){
+        case '+':
+        // incrementa...
+
+            f = fopen(path, "r");
+            if(f == NULL){
+            // é o primeiro membro do grupo
+
+                f = fopen(path, "w");
+                qty = 1;
+                fprintf(f, "%d\n", qty);
+                fclose(f);
+            }else{
+            // é um novo membro no grupo
+
+                fscanf(f, "%d", &qty);
+                fclose(f);
+                f = fopen(path, "w");
+                qty++;
+                fprintf(f, "%d\n", qty);
+                fclose(f);
+            }
+
+            return 0;
+
+            break;
+
+        case '-':
+        // decrementa...
+
+            f = fopen(path, "r");
+            fscanf(f, "%d", &qty);
+            fclose(f);
+            qty--;
+            if(qty > 0){
+
+                f = fopen(path, "w");
+                fprintf(f, "%d\n", qty);
+                fclose(f);
+            }else{
+            // era o último membro do grupo
+            
+                remove(path); // apaga o arquivo
+            
+                return 1; // notifica que o grupo está vazio
+            }
+
+            return 0;
+
+            break;
     }
 }

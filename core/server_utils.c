@@ -12,7 +12,7 @@
  *  Funções
  */
 bool checkServerArgs(int argc, char **argv){
-// função p/ verificar os parâmetros de entrada
+// função p/ verificar os parâmetros de inicialização
     
     bool flag = true;
 
