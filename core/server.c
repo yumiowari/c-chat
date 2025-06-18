@@ -395,8 +395,8 @@ server_t setupComm(int argc, char **argv){
     server_addr.sin_port = htons(server.port); // na porta escolhida
 
     // vincula...
-    if(bind(server_fd,       // o file desciptor do soquete do servidor
-            server_addr_ptr, // ao endereço do servidor
+    if(bind(server_fd,       // o file desciptor do soquete de servidor
+            server_addr_ptr, // ao endereço de servidor
             server_addr_len) < 0){
         FORMAT_ERROR(error, "Falha de definição do endereço de servidor: ");
                                 
@@ -404,7 +404,7 @@ server_t setupComm(int argc, char **argv){
     }
 
     // declara intenção de escutar novas conexões...
-    if(listen(server_fd, // no soquete do servidor com
+    if(listen(server_fd, // no soquete de servidor com
               5          // fila limite de 5 requisições
              ) < 0){
         FORMAT_ERROR(error, "Falha na tentativa de conexão com o cliente: ");
@@ -429,7 +429,7 @@ client_t tryAccept(server_t server){
                            server.server_addr_ptr,
                            &server.server_addr_len);
         if(client_fd < 0){
-            sleep(1); // espera 1s antes da pŕox. tentativa
+            sleep(1); // espera 1s antes da próx. tentativa
 
             continue;
         }
