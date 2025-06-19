@@ -16,6 +16,8 @@
 #include <GLES2/gl2.h>
 #endif
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#include <vector>
+#include "chatUI.hpp"
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -33,6 +35,10 @@ static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
+
+// conjunto de todas as chatrooms iniciadas...
+// ao entrar em um chat, a sala é adicionada para que seus dados sejam persistidos
+std::vector<chatUI> chats;
 
 // Main code
 int main(int, char**)
@@ -119,7 +125,7 @@ int main(int, char**)
     //IM_ASSERT(font != nullptr);
 
     // Our state
-    bool show_demo_window = true;
+    bool show_demo_window = false;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
@@ -150,7 +156,8 @@ int main(int, char**)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+        // DEFAULT STUFF (SHOULD KEEP)
+        /*// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
@@ -185,6 +192,26 @@ int main(int, char**)
             if (ImGui::Button("Close Me"))
                 show_another_window = false;
             ImGui::End();
+        }*/
+
+        // instancia um objeto de chat teste
+        if (chats.empty()) {
+            std::string user = "rafael";
+            long room = 123456;
+
+            chatUI testChat(user, room);
+            chats.push_back(testChat);
+        }
+
+        // renderiza todos os chats abertos
+        {
+            for (size_t i = 0; i < chats.size(); ++i) {
+                chats[i].Render();
+                if (!chats[i].isOpen)
+                {
+                    chats.erase(chats.begin() + i);
+                }
+            }
         }
 
         // Rendering

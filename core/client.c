@@ -346,9 +346,9 @@ void setupGUIComm(int port){
     }
     
     // define o endereço de mensageiro...
-    msgr_addr.sin_family = AF_INET;          // para protocolo IPv4,
-    msgr_addr.sin_addr.s_addr = INADDR_ANY;  // de qualquer origem e (to-do: limitar para localhost)
-    msgr_addr.sin_port = htons(port);        // na porta escolhida
+    msgr_addr.sin_family = AF_INET;                     // para protocolo IPv4,
+    msgr_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // apenas localhost
+    msgr_addr.sin_port = htons(port);                   // na porta escolhida
 
     // vincula...
     if(bind(msgr_fd,       // o file desciptor do soquete de mensageiro

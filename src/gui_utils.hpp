@@ -1,5 +1,5 @@
-#ifndef GUI_UTILS_H
-#define GUI_UTILS_H
+#ifndef GUI_UTILS_HPP
+#define GUI_UTILS_HPP
 
 /*
  *  Estruturas
@@ -11,18 +11,16 @@ struct message {
     int counter; // quando -1, indica que a mensagem é inválida
 }typedef(message_t);
 
-struct client{
-    char username[16]; // 15 char + '\0'
-    long secret;
-}typedef(client_t);
-
 int setupComm(int port);
 // função para estabelecer conexão com o mensageiro
 
 bool sendMsgr(message_t buffer, int ui_fd);
 // função para enviar a mensagem ao mensageiro
 
+void resetMsg(message_t *msg);
+// função p/ resetar os atributos da mensagem
+
 message_t recvMsgr(int ui_fd);
 // função para receber a mensagem do mensageiro
 
-#endif // GUI_UTILS_H
+#endif // GUI_UTILS_HPP

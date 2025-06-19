@@ -9,7 +9,7 @@
 #include <string.h>     // strcpy()
 #include <stdbool.h>    // bool type
 
-#include "gui_utils.h"
+#include "gui_utils.hpp"
 
 int setupComm(int port){
 // função para estabelecer conexão com o mensageiro
