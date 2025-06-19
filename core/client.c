@@ -80,6 +80,10 @@ int main(int argc, char **argv){
     if(argc == 5){
         if(strcmp(argv[4], "-gui") == 0){
             isMsgr = true;
+        }else{
+            FORMAT_ERROR(error, "Parâmetro opcional inválido: ");
+
+            crashLanding(error);
         }
     }
 
@@ -361,14 +365,16 @@ void setupGUIComm(int port){
 
     // declara intenção de escutar novas conexões...
     if(listen(msgr_fd, // no soquete de mensageiro com
-              1        // fila limite de uma requisição
-             ) < 0){
+        1        // fila limite de uma requisição
+    ) < 0){
         FORMAT_ERROR(error, "Falha na tentativa de conexão com a interface: ");
-                                        
+        
         crashLanding(error);
     }
-
+    
     // tenta aceitar uma conexão com a interface
+    printf("Tentando conexão com a interface...\n");
+    
     while(running){
         ui_fd = accept(msgr_fd,
                        msgr_addr_ptr,

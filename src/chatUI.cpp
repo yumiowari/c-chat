@@ -10,12 +10,10 @@ chatUI::chatUI(std::string &n, long secret) : scrollToBottom(false), username(n)
 {
     title = std::to_string(roomID);
     inputID = "##input" + title;
+    // *Feature*: Não possível existir duas instâncias de chat do mesmo grupo no mesmo computador.
 
     // estabele conexão com a interface
     ui_fd = setupComm(8080 + 1);
-
-    // inicia a thread para recepção de mensagem
-    pthread_create(&tid, NULL, recvThread, &ui_fd);
 }
 
 void chatUI::addMsg(const std::string &msg){
@@ -23,33 +21,26 @@ void chatUI::addMsg(const std::string &msg){
     scrollToBottom = true;
 }
 
-void *chatUI::recvThread(void *arg){{
-    int ui_fd = *(int*)arg;
-    while(true){
-        message_t message = recvMsgr(ui_fd);
-        if (message.counter != -1) {
-            std::string msg = std::string(message.username) + ": " + std::string(message.buffer);
-            addMsg(msg);
-        }
-    }
-}}
-
 // renderiza a janela do chat (ImGui)
-void chatUI::Render() {
-    // verifica se a conexão com o mensageiro terminou
-
+void chatUI::Render(){
+    // recebe a mensagem do cliente
+    message_t message = recvMsgr(ui_fd);
+    if(message.counter != -1){
+        std::string msg = std::string(message.username) + " > " + std::string(message.buffer);
+        addMsg(msg);
+    }
 
     // limita o tamanho inicial da janela
     ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_Once);
-    ImGui::Begin(title.c_str(), &isOpen);
+    ImGui::Begin(title.c_str(), &isOpen); // isOpen indica se a janela está aberta ou fechada
 
     // área de mensagens com scroll
     ImGui::BeginChild("ScrollingRegion", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), false, ImGuiWindowFlags_HorizontalScrollbar);
-    for (const auto& msg : messages) {
+    for(const std::string& msg : messages){
         ImGui::TextWrapped("%s", msg.c_str());
     }
 
-    if (scrollToBottom) {
+    if(scrollToBottom){
         ImGui::SetScrollHereY(1.0f);
         scrollToBottom = false;
     }
@@ -60,21 +51,21 @@ void chatUI::Render() {
     static char inputBuffer[1024] = {};
     bool sendNow = false;
 
-    if (ImGui::InputText(inputID.c_str(), inputBuffer, sizeof(inputBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
-        if (inputBuffer[0] != '\0') {
+    if(ImGui::InputText(inputID.c_str(), inputBuffer, sizeof(inputBuffer), ImGuiInputTextFlags_EnterReturnsTrue)){
+        if(inputBuffer[0] != '\0'){
             sendNow = true;
         }
     }
 
     ImGui::SameLine();
 
-    if (ImGui::Button("Enviar")) {
-        if (inputBuffer[0] != '\0') {
+    if(ImGui::Button("Enviar")){
+        if(inputBuffer[0] != '\0'){
             sendNow = true;
         }
     }
 
-    if (sendNow) {
+    if(sendNow){
         message_t letter;
         resetMsg(&letter);
 
@@ -85,9 +76,10 @@ void chatUI::Render() {
         letter.secret = roomID;
         letter.counter = 1;
 
-        sendMsgr(letter, ui_fd); // envia
+        isOpen = sendMsgr(letter, ui_fd); // envia a mensagem para o mensageiro
+        // se o retorno for false, o servidor caiu e janela termina.
 
-        inputBuffer[0] = '\0';   // limpa input
+        inputBuffer[0] = '\0';   // limpa o input
     }
 
     ImGui::End();

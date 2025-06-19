@@ -38,7 +38,7 @@ static void glfw_error_callback(int error, const char* description)
 
 // conjunto de todas as chatrooms iniciadas...
 // ao entrar em um chat, a sala é adicionada para que seus dados sejam persistidos
-std::vector<chatUI> chats;
+std::vector<chatUI*> chats;
 
 // Main code
 int main(int, char**)
@@ -195,21 +195,22 @@ int main(int, char**)
         }*/
 
         // instancia um objeto de chat teste
-        if (chats.empty()) {
-            std::string user = "rafael";
+        if(chats.empty()){
+            std::string user = "Rafael";
             long room = 123456;
 
-            chatUI testChat(user, room);
-            chats.push_back(testChat);
+            chats.push_back(new chatUI(user, room)); // aloca a instância do objeto dinamicamente
         }
 
         // renderiza todos os chats abertos
         {
-            for (size_t i = 0; i < chats.size(); ++i) {
-                chats[i].Render();
-                if (!chats[i].isOpen)
-                {
+            for(size_t i = 0; i < chats.size();){
+                chats[i]->Render();
+                if(!chats[i]->isOpen){
+                    delete chats[i]; // libera a memória alocada dinamicamente
                     chats.erase(chats.begin() + i);
+                }else{
+                    ++i;
                 }
             }
         }
