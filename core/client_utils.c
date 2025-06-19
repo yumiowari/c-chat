@@ -1,3 +1,6 @@
+/*
+ *  Bibliotecas
+ */
 #include <stdio.h>     // fprintf()
 #include <stdbool.h>   // bool type
 #include <string.h>    // strlen()
@@ -12,7 +15,7 @@ bool checkClientArgs(int argc, char **argv){
 
     bool flag = true;
 
-    if(argc == 4){
+    if(argc == 4 || argc == 6){
         if(strlen(argv[1]) > 15){
             fprintf(stderr, "O nome de usuário não pode exceder 15 caracteres.\n");
 
@@ -66,7 +69,7 @@ bool checkClientArgs(int argc, char **argv){
         }
     }else{
         fprintf(stderr, "Parâmetros inválidos.\n"
-                        "Uso: ./client <username> <segredo> <porta>\n");
+                        "Uso: ./client <username> <segredo> <porta> <parâmetro opcional>\n");
 
         flag = false;
     }
