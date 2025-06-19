@@ -69,7 +69,7 @@ void crashLanding(char *error);
 // rotina de encerramento em caso de falha
 
 int main(int argc, char **argv){
-// uso: ./client <username> <secret> <port> <gui mode>
+// uso: ./client <username> <secret> <port> <gui mode> <if gui mode: messenger port>
 
     char error[BUFFER_SIZE];
 
@@ -77,7 +77,7 @@ int main(int argc, char **argv){
     signal(SIGINT, handleSIGINT);
 
     // verifica se está no modo de mensageiro
-    if(argc == 5){
+    if(argc == 6){
         if(strcmp(argv[4], "-gui") == 0){
             isMsgr = true;
         }else{
@@ -85,15 +85,30 @@ int main(int argc, char **argv){
 
             crashLanding(error);
         }
+
+        // verifica a porta
+        for(int i = 0; i < strlen(argv[5]); i++){
+            if(argv[5][i] < '0' || argv[5][i] > '9'){
+                FORMAT_ERROR(error, "A porta do mensageiro deve ser um número inteiro: ");
+
+                crashLanding(error);
+            }
+        }
+    }else if(argc == 5){
+        FORMAT_ERROR(error, "A porta do mensageiro precisa ser informada: ");
+
+        crashLanding(error);
     }
 
     client_t client = setupComm(argc, argv);
 
+    if(isMsgr)printf("(%ld): ", client.secret);
     printf("Conexão estabelecida com o servidor.\n");
 
     if(isMsgr){
-        setupGUIComm(atoi(argv[3]) + 1);
+        setupGUIComm(atoi(argv[5]));
 
+        if(isMsgr)printf("(%ld): ", client.secret);
         printf("Conexão estabelecida com a interface.\n");
     }
 
@@ -130,7 +145,10 @@ int main(int argc, char **argv){
                     if(message.secret == client.secret){
                         if(strcmp(message.username, client.username) != 0){
                             # pragma omp critical
+                            {
+                            if(isMsgr)printf("(%ld): ", client.secret);
                             printf("%s: %s\n", message.username, message.buffer);
+                            }
                         
                             if(isMsgr){
                                 ssize_t sent = send(ui_fd,
@@ -358,7 +376,7 @@ void setupGUIComm(int port){
     if(bind(msgr_fd,       // o file desciptor do soquete de mensageiro
             msgr_addr_ptr, // ao endereço de mensageiro
             msgr_addr_len) < 0){
-        FORMAT_ERROR(error, "Falha de definição do endereço de mensageiro: ");
+        FORMAT_ERROR(error, "Falha na definição do endereço de mensageiro: ");
                                 
         crashLanding(error);
     }

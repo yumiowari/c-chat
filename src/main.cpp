@@ -1,3 +1,13 @@
+/*
+ *
+ *  Módulo de Interface Gráfica para o C-Chat
+ *
+ *  Copyright © 2025 Rafael Renó Corrêa | owariyumi@gmail.com | Lucas Ferreira Alves | lucas.3451@hotmail.com
+ * 
+ *  Todos os direitos reservados.
+ * 
+ */
+
 // Dear ImGui: standalone example application for GLFW + OpenGL 3, using programmable pipeline
 // (GLFW is a cross-platform general purpose library for handling windows, inputs, OpenGL/Vulkan/Metal graphics context creation, etc.)
 
@@ -40,6 +50,7 @@ static void glfw_error_callback(int error, const char* description)
 // conjunto de todas as chatrooms iniciadas...
 // ao entrar em um chat, a sala é adicionada para que seus dados sejam persistidos
 std::vector<ChatUI*> chats;
+int modifier = 1; // modifier é incrementado à porta padrão (8080) para definir a porta da interface
 
 // Main code
 int main(int, char**)
@@ -198,7 +209,7 @@ int main(int, char**)
         }*/
 
         // renderiza a janela de login
-        loginUI.Render(chats);
+        loginUI.Render(chats, modifier);
         if(!loginUI.isOpen){ // se fechou a janela de login, termina a aplicação
             // Cleanup
             ImGui_ImplOpenGL3_Shutdown();

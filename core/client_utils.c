@@ -15,7 +15,7 @@ bool checkClientArgs(int argc, char **argv){
 
     bool flag = true;
 
-    if(argc == 4 || argc == 5){
+    if(argc == 4 || argc == 6){
         if(strlen(argv[1]) > 15){
             fprintf(stderr, "O nome de usuário não pode exceder 15 caracteres.\n");
 

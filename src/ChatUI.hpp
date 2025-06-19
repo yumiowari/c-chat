@@ -15,13 +15,14 @@ class ChatUI{
         std::string inputID;   // identificador da janela do chat
         std::string msgBuffer; // texto digitado
         std::string username;
-        long roomID; // i. e. "secret"
-        int ui_fd;   // file descriptor do soquete de comm.
+        long roomID;  // i. e. "secret"
+        int ui_fd;    // file descriptor do soquete de comm.
+        int modifier; // modificador para porta do mensageiro
     public:
         bool isOpen = true;
 
         // construtor parametrizado
-        ChatUI(std::string &n, long s);
+        ChatUI(std::string &n, long s, int m);
 
         // método para adicionar uma nova mensagem
         void addMsg(const std::string &msg);

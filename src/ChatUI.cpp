@@ -5,14 +5,14 @@
 #include "ChatUI.hpp"
 #include "gui_utils.hpp"
 
-ChatUI::ChatUI(std::string &n, long secret) : scrollToBottom(false), username(n), roomID(secret)
+ChatUI::ChatUI(std::string &n, long s, int m) : scrollToBottom(false), username(n), roomID(s), modifier(m)
 {
     title = std::to_string(roomID);
     inputID = "##input" + title;
     // *Feature*: Não possível existir duas instâncias de chat do mesmo grupo no mesmo computador.
 
     // estabele conexão com a interface
-    ui_fd = setupComm(8080 + 1);
+    ui_fd = setupComm(8080 + modifier);
 }
 
 void ChatUI::addMsg(const std::string &msg){

@@ -11,6 +11,9 @@ class LoginUI{
         char secretBuffer[32];
         bool sendUsernameNow;
         bool sendSecretNow;
+
+        // módulo para iniciar o mensageiro em paralelo
+        void launch_msgr(const std::string &username, const std::string &secret, const int &modifier);
     public:
         bool isOpen = true;
 
@@ -18,7 +21,7 @@ class LoginUI{
         LoginUI();
 
         // módulo para renderizar o conteúdo da janela
-        void Render(std::vector<ChatUI*> &chats);
+        void Render(std::vector<ChatUI*> &chats, int &modifier);
 };
 
 #endif // LOGINUI_HPP
