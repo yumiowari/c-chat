@@ -2,10 +2,10 @@
 #include <string>
 #include <imgui.h>
 
-#include "chatUI.hpp"
+#include "ChatUI.hpp"
 #include "gui_utils.hpp"
 
-chatUI::chatUI(std::string &n, long secret) : scrollToBottom(false), username(n), roomID(secret)
+ChatUI::ChatUI(std::string &n, long secret) : scrollToBottom(false), username(n), roomID(secret)
 {
     title = std::to_string(roomID);
     inputID = "##input" + title;
@@ -15,13 +15,13 @@ chatUI::chatUI(std::string &n, long secret) : scrollToBottom(false), username(n)
     ui_fd = setupComm(8080 + 1);
 }
 
-void chatUI::addMsg(const std::string &msg){
+void ChatUI::addMsg(const std::string &msg){
     this->messages.push_back(msg);
     scrollToBottom = true;
 }
 
 // renderiza a janela do chat (ImGui)
-void chatUI::Render(){
+void ChatUI::Render(){
     // limita o tamanho inicial da janela
     ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_Once);
     if(!ImGui::Begin(title.c_str(), &isOpen)){ // isOpen indica se a janela está aberta ou fechada

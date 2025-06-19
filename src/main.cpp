@@ -17,7 +17,8 @@
 #endif
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 #include <vector>
-#include "chatUI.hpp"
+#include "ChatUI.hpp"
+#include "LoginUI.hpp"
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -38,18 +39,12 @@ static void glfw_error_callback(int error, const char* description)
 
 // conjunto de todas as chatrooms iniciadas...
 // ao entrar em um chat, a sala é adicionada para que seus dados sejam persistidos
-std::vector<chatUI*> chats;
+std::vector<ChatUI*> chats;
 
 // Main code
 int main(int, char**)
 {
-    // instancia um objeto de chat teste
-    if(chats.empty()){
-        std::string user = "Rafael";
-        long room = 123456;
-
-        chats.push_back(new chatUI(user, room)); // aloca a instância do objeto dinamicamente
-    }
+    LoginUI loginUI = LoginUI();
 
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
@@ -201,6 +196,20 @@ int main(int, char**)
                 show_another_window = false;
             ImGui::End();
         }*/
+
+        // renderiza a janela de login
+        loginUI.Render(chats);
+        if(!loginUI.isOpen){ // se fechou a janela de login, termina a aplicação
+            // Cleanup
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+
+            glfwDestroyWindow(window);
+            glfwTerminate();
+
+            return 0;
+        }
 
         // renderiza todos os chats abertos
         {
