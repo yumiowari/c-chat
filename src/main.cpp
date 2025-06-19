@@ -43,6 +43,14 @@ std::vector<chatUI*> chats;
 // Main code
 int main(int, char**)
 {
+    // instancia um objeto de chat teste
+    if(chats.empty()){
+        std::string user = "Rafael";
+        long room = 123456;
+
+        chats.push_back(new chatUI(user, room)); // aloca a instância do objeto dinamicamente
+    }
+
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
         return 1;
@@ -194,22 +202,14 @@ int main(int, char**)
             ImGui::End();
         }*/
 
-        // instancia um objeto de chat teste
-        if(chats.empty()){
-            std::string user = "Rafael";
-            long room = 123456;
-
-            chats.push_back(new chatUI(user, room)); // aloca a instância do objeto dinamicamente
-        }
-
         // renderiza todos os chats abertos
         {
             for(size_t i = 0; i < chats.size();){
-                chats[i]->Render();
                 if(!chats[i]->isOpen){
                     delete chats[i]; // libera a memória alocada dinamicamente
                     chats.erase(chats.begin() + i);
                 }else{
+                    chats[i]->Render();
                     ++i;
                 }
             }

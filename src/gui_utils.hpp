@@ -20,7 +20,7 @@ bool sendMsgr(message_t buffer, int ui_fd);
 void resetMsg(message_t *msg);
 // função p/ resetar os atributos da mensagem
 
-message_t recvMsgr(int ui_fd);
+message_t recvMsgr(int ui_fd, int &flag);
 // função para receber a mensagem do mensageiro
 
 #endif // GUI_UTILS_HPP

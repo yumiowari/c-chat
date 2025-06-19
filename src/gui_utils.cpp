@@ -8,6 +8,8 @@
 #include <netinet/in.h> // struct sockaddr_in
 #include <string.h>     // strcpy()
 #include <stdbool.h>    // bool type
+#include <fcntl.h>
+#include <errno.h>
 
 #include "gui_utils.hpp"
 
@@ -35,6 +37,10 @@ int setupComm(int port){
             client_addr_ptr,
             client_addr_len);
 
+    // define o socket como não bloqueante
+    int flags = fcntl(ui_fd, F_GETFL, 0);
+    fcntl(ui_fd, F_SETFL, flags | O_NONBLOCK);
+
     return ui_fd;
 }
 
@@ -60,7 +66,7 @@ void resetMsg(message_t *msg){
     msg->counter = -1;
 }
 
-message_t recvMsgr(int ui_fd){
+message_t recvMsgr(int ui_fd, int &flag){
 // função para receber a mensagem do mensageiro
 
     message_t message;
@@ -70,8 +76,19 @@ message_t recvMsgr(int ui_fd){
                         &message,
                         sizeof(message_t),
                         0);
-    if(rcvd <= 0)
-        resetMsg(&message);
+    if(rcvd > 0){
+    // mensagem válida
+        flag = 0;
+    }else if(rcvd == 0){
+    // conexão fechada
+        flag = 1;
+    }else if(errno == EAGAIN || errno == EWOULDBLOCK){
+    // sem dados, não faz nada
+        flag = 2;
+    }else{ // rcvd < 0
+    // erro real
+        flag = 3;
+    }
     
     return message;
 }

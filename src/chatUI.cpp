@@ -1,7 +1,6 @@
 #include <vector>
 #include <string>
 #include <imgui.h>
-#include <pthread.h>
 
 #include "chatUI.hpp"
 #include "gui_utils.hpp"
@@ -23,16 +22,30 @@ void chatUI::addMsg(const std::string &msg){
 
 // renderiza a janela do chat (ImGui)
 void chatUI::Render(){
-    // recebe a mensagem do cliente
-    message_t message = recvMsgr(ui_fd);
-    if(message.counter != -1){
-        std::string msg = std::string(message.username) + " > " + std::string(message.buffer);
-        addMsg(msg);
-    }
-
     // limita o tamanho inicial da janela
     ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_Once);
-    ImGui::Begin(title.c_str(), &isOpen); // isOpen indica se a janela está aberta ou fechada
+    if(!ImGui::Begin(title.c_str(), &isOpen)){ // isOpen indica se a janela está aberta ou fechada
+        ImGui::End();
+
+        return;
+    }
+
+    // recebe a mensagem do cliente
+    int flag = -1;
+    message_t message = recvMsgr(ui_fd, flag);
+    if(flag == 0){
+    // mensagem válida
+        std::string msg = std::string(message.username) + " > " + std::string(message.buffer);
+        addMsg(msg);
+    }else if(flag == 1){
+    // conexão fechada
+        isOpen = false;
+    }else if(flag == 2){
+    // sem dados, não faz nada
+    }else if(flag == 3){
+    // caso de erro
+        isOpen = false;
+    }
 
     // área de mensagens com scroll
     ImGui::BeginChild("ScrollingRegion", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), false, ImGuiWindowFlags_HorizontalScrollbar);
@@ -48,7 +61,7 @@ void chatUI::Render(){
     ImGui::EndChild();
 
     // campo de entrada de texto
-    static char inputBuffer[1024] = {};
+    char inputBuffer[1024] = {};
     bool sendNow = false;
 
     if(ImGui::InputText(inputID.c_str(), inputBuffer, sizeof(inputBuffer), ImGuiInputTextFlags_EnterReturnsTrue)){
@@ -79,7 +92,10 @@ void chatUI::Render(){
         isOpen = sendMsgr(letter, ui_fd); // envia a mensagem para o mensageiro
         // se o retorno for false, o servidor caiu e janela termina.
 
-        inputBuffer[0] = '\0';   // limpa o input
+        std::string msg = std::string(letter.username) + " > " + std::string(letter.buffer);
+        addMsg(msg);
+
+        inputBuffer[0] = '\0'; // limpa o input
     }
 
     ImGui::End();
