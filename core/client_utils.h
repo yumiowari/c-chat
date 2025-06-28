@@ -11,11 +11,12 @@
 /*
  *  Estruturas
  */
-struct message {
+struct message{
     char username[16];
     long secret;
     char buffer[1024];
-    int counter; // quando -1, indica que a mensagem é inválida
+    int counter;
+    // quando -1, indica que a mensagem é inválida
 }typedef(message_t);
 
 struct client{

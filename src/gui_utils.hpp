@@ -4,7 +4,7 @@
 /*
  *  Estruturas
  */
-struct message {
+struct message{
     char username[16];
     long secret;
     char buffer[1024];

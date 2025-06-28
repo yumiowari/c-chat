@@ -13,7 +13,7 @@ class LoginUI{
         bool sendSecretNow;
 
         // módulo para iniciar o mensageiro em paralelo
-        void launch_msgr(const std::string &username, const std::string &secret, const int &modifier);
+        void launchMsgr(const std::string &username, const std::string &secret, const int &modifier);
     public:
         bool isOpen = true;
 

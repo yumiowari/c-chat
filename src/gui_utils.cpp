@@ -78,15 +78,19 @@ message_t recvMsgr(int ui_fd, int &flag){
                         0);
     if(rcvd > 0){
     // mensagem válida
+    
         flag = 0;
     }else if(rcvd == 0){
     // conexão fechada
+
         flag = 1;
     }else if(errno == EAGAIN || errno == EWOULDBLOCK){
     // sem dados, não faz nada
+
         flag = 2;
     }else{ // rcvd < 0
     // erro real
+
         flag = 3;
     }
     

@@ -47,8 +47,8 @@
 int client_fd, // descritor de arquivo do soquete de cliente
     msgr_fd,   //                                 de mensageiro
     ui_fd;     //                                 da interface
-bool running = true;
-bool isMsgr = false;
+bool running = true,
+     isMsgr = false;
 
 /*
  *  Assinaturas
@@ -146,7 +146,7 @@ int main(int argc, char **argv){
                         if(strcmp(message.username, client.username) != 0){
                             # pragma omp critical
                             {
-                            if(isMsgr)printf("(%ld): ", client.secret);
+                            if(isMsgr)printf("(%ld) ", client.secret);
                             printf("%s: %s\n", message.username, message.buffer);
                             }
                         
@@ -398,7 +398,7 @@ void setupGUIComm(int port){
                        msgr_addr_ptr,
                        &msgr_addr_len);
         if(ui_fd < 0){
-            sleep(1); // espera 1s antes da próx. tentativa
+            usleep(250000); // espera 250ms antes da próx. tentativa
 
             continue;
         }

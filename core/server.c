@@ -48,14 +48,13 @@
 /*
  *  Variáveis Globais
  */
-// descritores de arquivo dos soquetes
 int server_fd,
     client_fd;
 bool running = true;
 client_t children[MAX_CHILDREN]; // array de processos filhos (clientes)
-int children_qty = 0;            // contador de filhos (solução temporária)
-int secrets[MAX_CHILDREN]; // array de secrets
-int secrets_qty = 0;       // contador de secrets
+int children_qty = 0,            // contador de filhos (solução temporária)
+    secrets[MAX_CHILDREN], // array de secrets
+    secrets_qty = 0;       // contador de secrets
 
 /*
  *  Assinaturas

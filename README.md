@@ -4,14 +4,15 @@ Sistema de chatting cliente-servidor em C.
 ## Sumário
 
 1. [Sobre](#sobre)
-2. [Compilação](#compilação)
+2. [Requisitos](#requisitos)
+3. [Compilação](#compilação)
     1. [Servidor](#servidor)
     2. [Cliente](#Cliente)
         1. [CLI](#cli)
         2. [GUI](#gui)
-3. [Execução](#execução)
-4. [Compatibilidade](#compatibilidade)
-4. [Créditos](#créditos)
+4. [Execução](#execução)
+5. [Compatibilidade](#compatibilidade)
+6. [Créditos](#créditos)
 
 ## Sobre
 
@@ -20,6 +21,16 @@ O projeto de desenvolvimento __C-Chat__ constitui da elaboração de um sistema 
 Foi desenvolvido um servidor _backend_ em C `server` utilizando multi-processamento e _multi-threading_ para orquestrar a comunicação simultânea de muitos usuários em grupos distintos. Além disso, a aplicação utiliza uma interface em linha de comando `client` para viabilizar a utilização da ferramenta pelo terminal do Linux.
 
 Alternativamente, foi desenolvida uma interface gráfica em C++ utilizando a biblioteca [DearImGui](https://github.com/ocornut/imgui). Nesse cenário, a aplicação `client_gui` permite inicializar um ou vários _chats_, onde a aplicação `client` passa a atuar como mensageiro entre a interface gráfica e o servidor _backend_.
+
+## Requisitos
+
+GLFW:
+
+`sudo pacman -S glfw`
+
+CMake:
+
+`sudo pacman -S make`
 
 ## Compilação
 
