@@ -68,7 +68,7 @@ Execute...
 
 ...em `./src/`.
 
-> Certifique-se de ter o GLFW instalado.
+> As instruções de compilação do CMake estão definidas no `Makefile`.
 
 ## Execução
 
