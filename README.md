@@ -42,6 +42,8 @@ Execute...
 
 `gcc -c server_utils.c -o server_utils.o`
 
+`gcc -c client_utils.c -o client_utils.o`
+
 `gcc server.c client_utils.o server_utils.o -o server -fopenmp`
 
 ...em `./core/`.
@@ -70,7 +72,7 @@ Execute...
 
 ## Execução
 
-Altere `SERVER_IP` em `client.c` para o endereço IPv4 da máquina servidora.
+Altere a definição `SERVER_IP` (linha 35) em `client.c` para o endereço IPv4 da máquina servidora.
 
 Execute `./server <port>` para iniciar o servidor.
 
