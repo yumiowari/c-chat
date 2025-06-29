@@ -69,7 +69,9 @@ void crashLanding(char *error);
 // rotina de encerramento em caso de falha
 
 int main(int argc, char **argv){
-// uso: ./client <username> <secret> <port> <gui mode> <if gui mode: messenger port>
+// uso: ./client <username> <secret> <port>
+// ou, quando mensageiro...
+// ./client <username> <secret> <port> -gui <messenger port>
 
     char error[BUFFER_SIZE];
 
@@ -86,7 +88,7 @@ int main(int argc, char **argv){
             crashLanding(error);
         }
 
-        // verifica a porta
+        // verifica a porta de mensageiro
         for(int i = 0; i < strlen(argv[5]); i++){
             if(argv[5][i] < '0' || argv[5][i] > '9'){
                 FORMAT_ERROR(error, "A porta do mensageiro deve ser um número inteiro: ");

@@ -8,8 +8,8 @@
 #include <netinet/in.h> // struct sockaddr_in
 #include <string.h>     // strcpy()
 #include <stdbool.h>    // bool type
-#include <fcntl.h>
-#include <errno.h>
+#include <fcntl.h>      // fcntl()
+#include <errno.h>      // nº do último erro
 
 #include "gui_utils.hpp"
 

@@ -23,24 +23,24 @@ LoginUI::LoginUI() {
 }
 
 // módulo para iniciar o mensageiro em paralelo
-void LoginUI::launchMsgr(const string &username, const string &secret, const int &modifier){
+void LoginUI::launchMsgr(const string &username, const string &secret, const int &modifier, int port){
     pid_t pid = fork();
 
     if (pid == 0) {
     // processo filho
 
         string path = "../core/client";
-
-        int msgrPort = 8080 + modifier;
+        string serverPort = to_string(port);
+        string msgrPort = to_string(port + modifier);
 
         // monta os argumentos
         vector<char*> args;
         args.push_back(const_cast<char*>(path.c_str()));
         args.push_back(const_cast<char*>(username.c_str()));
         args.push_back(const_cast<char*>(secret.c_str()));
-        args.push_back(const_cast<char*>("8080"));
+        args.push_back(const_cast<char*>(serverPort.c_str()));
         args.push_back(const_cast<char*>("-gui"));
-        args.push_back(const_cast<char*>(to_string(msgrPort).c_str()));
+        args.push_back(const_cast<char*>(msgrPort.c_str()));
 
         args.push_back(nullptr); // termina com NULL
 
@@ -57,7 +57,7 @@ void LoginUI::launchMsgr(const string &username, const string &secret, const int
 }
 
 // módulo para renderizar o conteúdo da janela
-void LoginUI::Render(vector<ChatUI*> &chats, int &modifier){
+void LoginUI::Render(vector<ChatUI*> &chats, int &modifier, int port){
     // limita o tamanho inicial da janela
     ImGui::SetNextWindowSize(ImVec2(150, 150), ImGuiCond_Once);
     if(!ImGui::Begin(string("Login").c_str(), &isOpen)){ // isOpen indica se a janela está aberta ou fechada
@@ -94,12 +94,12 @@ void LoginUI::Render(vector<ChatUI*> &chats, int &modifier){
             long secret = atof(secretBuffer);
 
             // inicia o mensageiro
-            launchMsgr(username, to_string(secret), modifier);
+            launchMsgr(username, to_string(secret), modifier, port);
 
-            sleep(1); // espera 1 segundo
+            usleep(250000); // espera 250ms
             
             // instancia uma novo chatroom
-            chats.push_back(new ChatUI(username, secret, modifier));
+            chats.push_back(new ChatUI(username, secret, modifier, port));
 
             modifier++;
 

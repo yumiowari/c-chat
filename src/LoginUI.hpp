@@ -3,6 +3,8 @@
 
 #include <string>
 
+using namespace std;
+
 #include "ChatUI.hpp"
 
 class LoginUI{
@@ -13,7 +15,7 @@ class LoginUI{
         bool sendSecretNow;
 
         // módulo para iniciar o mensageiro em paralelo
-        void launchMsgr(const std::string &username, const std::string &secret, const int &modifier);
+        void launchMsgr(const string &username, const string &secret, const int &modifier, int port);
     public:
         bool isOpen = true;
 
@@ -21,7 +23,7 @@ class LoginUI{
         LoginUI();
 
         // módulo para renderizar o conteúdo da janela
-        void Render(std::vector<ChatUI*> &chats, int &modifier);
+        void Render(vector<ChatUI*> &chats, int &modifier, int port);
 };
 
 #endif // LOGINUI_HPP

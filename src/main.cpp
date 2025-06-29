@@ -26,9 +26,13 @@
 #include <GLES2/gl2.h>
 #endif
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
+
 #include <vector>
+
 #include "ChatUI.hpp"
 #include "LoginUI.hpp"
+
+using namespace std;
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -47,15 +51,23 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-// conjunto de todas as chatrooms iniciadas...
-// ao entrar em um chat, a sala é adicionada para que seus dados sejam persistidos
-std::vector<ChatUI*> chats;
-int modifier = 1; // modifier é incrementado à porta padrão (8080) para definir a porta da interface
+void cleanupRoutine(GLFWwindow *window);
+// rotina de limpeza da janela
+
+// porta do servidor...
+#define PORT 8080
 
 // Main code
 int main(int, char**)
 {
+    /* PRE-RENDER CODE */
     LoginUI loginUI = LoginUI();
+
+    // conjunto de todas as chatrooms iniciadas...
+    // ao entrar em um chat, a sala é adicionada para que seus dados sejam persistidos
+    vector<ChatUI*> chats;
+    int modifier = 1; // modifier é adicionado à porta padrão para definir a porta da interface
+    /*******************/
 
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
@@ -208,16 +220,11 @@ int main(int, char**)
             ImGui::End();
         }*/
 
+        /* RENDERING CODE */
         // renderiza a janela de login
-        loginUI.Render(chats, modifier);
+        loginUI.Render(chats, modifier, PORT);
         if(!loginUI.isOpen){ // se fechou a janela de login, termina a aplicação
-            // Cleanup
-            ImGui_ImplOpenGL3_Shutdown();
-            ImGui_ImplGlfw_Shutdown();
-            ImGui::DestroyContext();
-
-            glfwDestroyWindow(window);
-            glfwTerminate();
+            cleanupRoutine(window);
 
             return 0;
         }
@@ -226,7 +233,7 @@ int main(int, char**)
         {
             for(size_t i = 0; i < chats.size();){
                 if(!chats[i]->isOpen){
-                    delete chats[i]; // libera a memória alocada dinamicamente
+                    delete chats[i]; // libera a memória alocada
                     chats.erase(chats.begin() + i);
                 }else{
                     chats[i]->Render();
@@ -234,6 +241,7 @@ int main(int, char**)
                 }
             }
         }
+        /******************/
 
         // Rendering
         ImGui::Render();
@@ -250,6 +258,12 @@ int main(int, char**)
     EMSCRIPTEN_MAINLOOP_END;
 #endif
 
+    cleanupRoutine(window);
+
+    return 0;
+}
+
+void cleanupRoutine(GLFWwindow *window){
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -257,6 +271,4 @@ int main(int, char**)
 
     glfwDestroyWindow(window);
     glfwTerminate();
-
-    return 0;
 }
