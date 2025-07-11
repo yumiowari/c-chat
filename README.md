@@ -26,7 +26,7 @@ Alternativamente, foi desenolvida uma interface gráfica em C++ utilizando a bib
 
 A interface gráfica implementa [OpenGL](https://www.opengl.org/) + [GLFW](https://www.glfw.org/). Dessa forma, pode ser necessário instalar o GLFW em algumas distribuições Linux:
 
-`sudo pacman -S glfw` (Arch) ou `sudo apt install libglfw3` (Ubuntu).
+`sudo pacman -S glfw` (Arch) ou `sudo apt install libglfw3 libglfw3-dev` (Ubuntu).
 
 
 
